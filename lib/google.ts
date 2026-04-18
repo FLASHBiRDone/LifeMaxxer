@@ -1,5 +1,6 @@
-import { google } from 'googleapis';
+import { google, calendar_v3 } from 'googleapis';
 import { serverEnv } from '@/lib/env';
+import { decrypt, encrypt } from '@/lib/crypto';
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
@@ -32,4 +33,78 @@ export function buildConsentUrl(state: string) {
     state,
     include_granted_scopes: true,
   });
+}
+
+export type StoredTokens = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+};
+
+/**
+ * Build an authorized OAuth client for a user using their encrypted stored
+ * tokens. If the access token is expired, refresh it and return the new
+ * expiry so the caller can persist it.
+ */
+export async function authorizedClient(stored: StoredTokens) {
+  const client = getOAuthClient();
+  client.setCredentials({
+    access_token: decrypt(stored.access_token),
+    refresh_token: decrypt(stored.refresh_token),
+    expiry_date: new Date(stored.expires_at).getTime(),
+  });
+
+  let rotated: { access_token: string; expires_at: string } | null = null;
+  const expired = new Date(stored.expires_at).getTime() < Date.now() + 60_000;
+  if (expired) {
+    const { credentials } = await client.refreshAccessToken();
+    if (credentials.access_token && credentials.expiry_date) {
+      client.setCredentials(credentials);
+      rotated = {
+        access_token: encrypt(credentials.access_token),
+        expires_at: new Date(credentials.expiry_date).toISOString(),
+      };
+    }
+  }
+
+  return { client, rotated };
+}
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  description?: string | null;
+};
+
+/**
+ * Fetch events between two ISO timestamps from the user's primary calendar.
+ * Intentionally minimal — Phase 1 only needs today's events.
+ */
+export async function listEvents(
+  auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
+  timeMin: Date,
+  timeMax: Date,
+): Promise<CalendarEvent[]> {
+  const calendar = google.calendar({ version: 'v3', auth });
+  const res = await calendar.events.list({
+    calendarId: 'primary',
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 50,
+  });
+
+  const items: calendar_v3.Schema$Event[] = res.data.items ?? [];
+  return items
+    .filter((e) => e.id && e.summary)
+    .map((e) => ({
+      id: e.id!,
+      title: e.summary!,
+      start: e.start?.dateTime ?? e.start?.date ?? '',
+      end: e.end?.dateTime ?? e.end?.date ?? '',
+      description: e.description ?? null,
+    }));
 }

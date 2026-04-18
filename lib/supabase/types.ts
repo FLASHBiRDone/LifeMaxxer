@@ -1,17 +1,11 @@
 /**
  * Database types.
  *
- * Regenerate with:
+ * Regenerate with real types once migrations are applied:
  *   supabase gen types typescript --linked > lib/supabase/types.ts
  *
- * Until the schema is pushed, we expose a permissive placeholder so
- * server/client helpers compile.
+ * Until then, we use `any` so the app compiles. Runtime behavior is
+ * identical; only the type-level autocomplete is missing.
  */
-export type Database = {
-  public: {
-    Tables: Record<string, { Row: Record<string, unknown> }>;
-    Views: Record<string, { Row: Record<string, unknown> }>;
-    Functions: Record<string, unknown>;
-    Enums: Record<string, unknown>;
-  };
-};
+// Typed as `any` on purpose — swap for generated types later.
+export type Database = unknown;
