@@ -1,0 +1,46 @@
+{
+  "app": {
+    "name": "LifeMaxxer",
+    "tagline": "A quiet place to play your own life."
+  },
+  "nav": {
+    "today": "Today",
+    "hud": "Character Sheet",
+    "inbox": "Brain Dump",
+    "habits": "Habits",
+    "stats": "Stats",
+    "recipes": "Recipes",
+    "shopping": "Shopping",
+    "gm": "Game Master",
+    "settings": "Settings"
+  },
+  "vocab": {
+    "quest": "quest",
+    "quests": "quests",
+    "side_quest": "side quest",
+    "main_quest": "main quest",
+    "mana": "mana",
+    "dopabar": "DopaBar",
+    "boss_battle": "Boss Battle",
+    "respawn_token": "respawn token"
+  },
+  "today": {
+    "title": "Good morning",
+    "loading": "Fetching your day",
+    "empty": "Your calendar is clear today. That's a gift.",
+    "energy_prompt": "How is your battery today?",
+    "energy_low": "Low",
+    "energy_medium": "Medium",
+    "energy_high": "Full"
+  },
+  "copy": {
+    "gentle_err": "Something slipped. We'll try again when you're ready.",
+    "save": "Save",
+    "later": "Later",
+    "ok": "Ok"
+  },
+  "onboarding": {
+    "welcome": "Welcome.",
+    "subtitle": "Let's take it slow. Nothing is urgent."
+  }
+}

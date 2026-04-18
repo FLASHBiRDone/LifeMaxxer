@@ -1,0 +1,46 @@
+{
+  "app": {
+    "name": "LifeMaxxer",
+    "tagline": "Et rolig sted å spille ditt eget liv."
+  },
+  "nav": {
+    "today": "I dag",
+    "hud": "Karakterark",
+    "inbox": "Hjerne­dump",
+    "habits": "Vaner",
+    "stats": "Statistikk",
+    "recipes": "Oppskrifter",
+    "shopping": "Handleliste",
+    "gm": "Spillmester",
+    "settings": "Innstillinger"
+  },
+  "vocab": {
+    "quest": "oppdrag",
+    "quests": "oppdrag",
+    "side_quest": "side­oppdrag",
+    "main_quest": "hoved­oppdrag",
+    "mana": "energi",
+    "dopabar": "DopaBar",
+    "boss_battle": "bosskamp",
+    "respawn_token": "gjenoppstandelses­token"
+  },
+  "today": {
+    "title": "God morgen",
+    "loading": "Henter dagen din",
+    "empty": "Kalenderen er åpen i dag. Det er en gave.",
+    "energy_prompt": "Hvordan er batteriet i dag?",
+    "energy_low": "Lavt",
+    "energy_medium": "Midt på treet",
+    "energy_high": "Fullt"
+  },
+  "copy": {
+    "gentle_err": "Noe glapp. Vi prøver igjen når du er klar.",
+    "save": "Lagre",
+    "later": "Senere",
+    "ok": "Ok"
+  },
+  "onboarding": {
+    "welcome": "Velkommen.",
+    "subtitle": "La oss ta det rolig. Ingenting haster."
+  }
+}

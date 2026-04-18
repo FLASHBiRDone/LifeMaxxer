@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 98%;
+    --foreground: 220 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+    --primary: 160 60% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 94%;
+    --secondary-foreground: 220 20% 20%;
+    --muted: 220 15% 94%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 260 60% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 160 60% 45%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 220 18% 8%;
+    --foreground: 220 15% 92%;
+    --card: 220 18% 12%;
+    --card-foreground: 220 15% 92%;
+    --primary: 160 55% 55%;
+    --primary-foreground: 220 18% 8%;
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 220 15% 92%;
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 10% 65%;
+    --accent: 260 50% 70%;
+    --accent-foreground: 220 18% 8%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 22%;
+    --input: 220 15% 22%;
+    --ring: 160 55% 55%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

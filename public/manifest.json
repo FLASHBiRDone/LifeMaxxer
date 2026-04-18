@@ -1,0 +1,33 @@
+{
+  "name": "LifeMaxxer",
+  "short_name": "LifeMaxxer",
+  "description": "A quiet place to play your own life.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#10131a",
+  "theme_color": "#10131a",
+  "lang": "nb",
+  "dir": "ltr",
+  "categories": ["lifestyle", "productivity", "health"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
