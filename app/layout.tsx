@@ -42,7 +42,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className="min-h-dvh antialiased pb-[calc(4rem+env(safe-area-inset-bottom))]">
+      <body className="min-h-dvh antialiased pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

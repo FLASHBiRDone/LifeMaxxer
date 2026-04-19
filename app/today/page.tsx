@@ -6,6 +6,7 @@ import { EnergyCheckIn } from '@/components/today/energy';
 import { RunBriefingButton } from '@/components/today/run-briefing';
 import { TodayHabits } from '@/components/today/today-habits';
 import { CalendarStrip } from '@/components/today/calendar-strip';
+import { TodayHero } from '@/components/today/hero';
 import { authorizedClient, listEvents } from '@/lib/google';
 
 export const dynamic = 'force-dynamic';
@@ -15,13 +16,7 @@ type BriefingOutput = {
   quests: { title: string; why: string }[];
 };
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return 'God natt';
-  if (h < 12) return 'God morgen';
-  if (h < 17) return 'God ettermiddag';
-  return 'God kveld';
-}
+type Level = 'low' | 'medium' | 'high';
 
 export default async function TodayPage() {
   const supabase = await createClient();
@@ -37,6 +32,7 @@ export default async function TodayPage() {
     { data: habits },
     { data: habitLogs },
     { data: gtok },
+    { data: profile },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -73,6 +69,11 @@ export default async function TodayPage() {
       .select('access_token, refresh_token, expires_at')
       .eq('user_id', user.id)
       .maybeSingle(),
+    supabase
+      .from('user_profiles')
+      .select('display_name')
+      .eq('user_id', user.id)
+      .maybeSingle(),
   ]);
 
   let briefing: BriefingOutput | null = null;
@@ -105,35 +106,33 @@ export default async function TodayPage() {
     return (h.days_of_week ?? []).includes(todayDow);
   });
   const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
+  const habitsDone = dueHabits.filter((h: any) => loggedSet.has(h.id)).length;
+  const questsList = (quests as any[]) ?? [];
+  const questsDone = questsList.filter((q) => q.completed_at).length;
 
   return (
-    <main className="container max-w-xl py-8 space-y-8">
-      <header className="space-y-1">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{dateString}</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{greeting()}</h1>
-        {briefing?.intro ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">{briefing.intro}</p>
-        ) : (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Ingen brief enda — trykk under for å lage en.
-          </p>
-        )}
-      </header>
+    <main className="container max-w-xl py-6 space-y-6">
+      <TodayHero
+        name={(profile as any)?.display_name ?? null}
+        intro={briefing?.intro ?? null}
+        habitsDone={habitsDone}
+        habitsTotal={dueHabits.length}
+        questsDone={questsDone}
+        questsTotal={questsList.length}
+        energyLevel={(mana as any)?.level ?? null}
+      />
 
-      <EnergyCheckIn initialLevel={(mana as any)?.level ?? null} />
+      <EnergyCheckIn initialLevel={(mana as any)?.level as Level | null ?? null} />
 
       {calEvents.length > 0 && <CalendarStrip events={calEvents} />}
 
-      <TodayQuests quests={(quests as any[]) ?? []} />
+      <TodayQuests quests={questsList} />
 
       {dueHabits.length > 0 && (
-        <TodayHabits
-          habits={dueHabits as any[]}
-          loggedIds={[...loggedSet]}
-        />
+        <TodayHabits habits={dueHabits as any[]} loggedIds={[...loggedSet] as string[]} />
       )}
 
-      <div className="pt-2 border-t">
+      <div className="pt-2">
         <RunBriefingButton hasBriefing={Boolean(briefing)} />
       </div>
     </main>

@@ -29,7 +29,7 @@ export default async function HabitsPage() {
   const loggedIds = (logs ?? []).map((l: { habit_id: string }) => l.habit_id);
 
   return (
-    <main className="container max-w-xl py-10">
+    <main className="container max-w-xl py-6">
       <HabitList
         habits={(habits as any[]) ?? []}
         loggedToday={loggedIds}

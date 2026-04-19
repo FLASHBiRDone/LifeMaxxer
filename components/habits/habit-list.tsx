@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Plus, Pencil, Check, Calendar } from 'lucide-react';
+import { Plus, Pencil, Check, Calendar, Flame, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { HabitForm, type HabitDraft } from './habit-form';
@@ -29,8 +29,8 @@ const FREQ_LABEL: Record<string, string> = {
 function isDueToday(habit: Habit): boolean {
   if (habit.frequency === 'daily') return true;
   if (habit.frequency === 'weekly') return true;
-  const dow = new Date().getDay(); // 0=Sun, 1=Mon...
-  const iso = dow === 0 ? 7 : dow; // convert to ISO 1=Mon, 7=Sun
+  const dow = new Date().getDay();
+  const iso = dow === 0 ? 7 : dow;
   return (habit.days_of_week ?? []).includes(iso);
 }
 
@@ -117,29 +117,58 @@ export function HabitList({
 
   const dueToday = habits.filter(isDueToday);
   const notDueToday = habits.filter((h) => !isDueToday(h));
+  const doneCount = dueToday.filter((h) => loggedToday.has(h.id)).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Vaner</h1>
-        <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true); }}>
-          <Plus className="h-4 w-4" />
-          Ny vane
-        </Button>
-      </div>
+      <header className="space-y-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
+            Rutiner du bygger
+          </p>
+          <h1 className="text-3xl font-bold">Vaner</h1>
+        </div>
+
+        {dueToday.length > 0 && (
+          <div className="rounded-2xl grad-hero border p-4 flex items-center gap-4">
+            <div className="flex-shrink-0 h-12 w-12 rounded-2xl grad-primary flex items-center justify-center text-primary-foreground">
+              <Flame className="h-6 w-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">
+                {doneCount} av {dueToday.length} vaner gjort i dag
+              </p>
+              <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full grad-primary transition-all duration-500"
+                  style={{ width: `${(doneCount / Math.max(1, dueToday.length)) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
 
       {habits.length === 0 ? (
-        <div className="rounded-2xl border border-dashed p-10 text-center space-y-3">
-          <p className="text-muted-foreground text-sm">Ingen vaner enda.</p>
+        <div className="rounded-3xl border border-dashed bg-card/50 p-12 text-center space-y-4">
+          <div className="mx-auto h-16 w-16 rounded-full grad-hero flex items-center justify-center">
+            <Flame className="h-7 w-7 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold">Ingen vaner enda</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Start med én liten rutine. Mindre er mer.
+            </p>
+          </div>
           <Button size="sm" onClick={() => setFormOpen(true)}>
-            <Plus className="h-4 w-4" /> Legg til din første vane
+            <Plus className="h-4 w-4" /> Legg til din første
           </Button>
         </div>
       ) : (
         <>
           {dueToday.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 I dag
               </h2>
               <ul className="space-y-2">
@@ -162,8 +191,8 @@ export function HabitList({
 
           {notDueToday.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Ikke i dag
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Andre dager
               </h2>
               <ul className="space-y-2">
                 {notDueToday.map((habit) => (
@@ -199,6 +228,15 @@ export function HabitList({
         } : undefined}
         onSave={handleSave}
       />
+
+      <button
+        type="button"
+        onClick={() => { setEditing(null); setFormOpen(true); }}
+        aria-label="Ny vane"
+        className="fixed bottom-28 right-6 z-30 h-14 w-14 rounded-full grad-primary text-primary-foreground shadow-lg soft-shadow flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.5} />
+      </button>
     </div>
   );
 }
@@ -222,10 +260,8 @@ function HabitCard({
   addingCalendar: boolean;
   disabled?: boolean;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
-    <li className="rounded-2xl border bg-card overflow-hidden">
+    <li className="group rounded-2xl border bg-card overflow-hidden soft-shadow card-hover">
       <div className="flex items-start gap-3 p-4">
         <button
           type="button"
@@ -233,35 +269,36 @@ function HabitCard({
           disabled={disabled}
           aria-label={logged ? 'Merk som ikke gjort' : 'Merk som gjort'}
           className={cn(
-            'mt-0.5 h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors',
+            'mt-0.5 h-7 w-7 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
             logged
-              ? 'bg-primary border-primary text-primary-foreground'
+              ? 'grad-primary border-transparent text-primary-foreground'
               : 'border-muted-foreground/40 hover:border-primary',
+            logged && 'animate-pop',
           )}
         >
-          {logged && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+          {logged && <Check className="h-4 w-4" strokeWidth={3} />}
         </button>
 
-        <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-medium leading-snug', logged && 'line-through text-muted-foreground')}>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <p className={cn('text-sm font-semibold leading-snug', logged && 'line-through text-muted-foreground')}>
             {habit.title}
           </p>
           {habit.cue && (
-            <p className="text-xs text-muted-foreground mt-0.5">{habit.cue}</p>
+            <p className="text-xs text-muted-foreground mt-1">{habit.cue}</p>
           )}
-          <div className="flex items-center gap-1.5 mt-1.5">
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
             <Badge variant="secondary">{FREQ_LABEL[habit.frequency] ?? habit.frequency}</Badge>
-            {logged && <Badge variant="success">Gjort i dag</Badge>}
+            {logged && <Badge variant="success">✓ Gjort</Badge>}
           </div>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             type="button"
             onClick={onAddToCalendar}
             disabled={addingCalendar}
-            title="Legg til i kalender"
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            title="Legg til i Google Calendar"
+            className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
           >
             <Calendar className="h-4 w-4" />
           </button>
@@ -269,9 +306,17 @@ function HabitCard({
             type="button"
             onClick={onEdit}
             title="Rediger"
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Arkiver"
+            className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>

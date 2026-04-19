@@ -4,14 +4,17 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { createClient } from '@/lib/supabase/client';
 import { osloDayBounds } from '@/lib/time';
+import { cn } from '@/lib/cn';
 
 type Level = 'low' | 'medium' | 'high';
 
-export function EnergyCheckIn({
-  initialLevel,
-}: {
-  initialLevel: Level | null;
-}) {
+const OPTIONS: { key: Level; labelKey: string; emoji: string }[] = [
+  { key: 'low', labelKey: 'today.energy_low', emoji: '🌱' },
+  { key: 'medium', labelKey: 'today.energy_medium', emoji: '🌤️' },
+  { key: 'high', labelKey: 'today.energy_high', emoji: '⚡' },
+];
+
+export function EnergyCheckIn({ initialLevel }: { initialLevel: Level | null }) {
   const t = useTranslations();
   const [level, setLevel] = useState<Level | null>(initialLevel);
   const [isPending, startTransition] = useTransition();
@@ -31,19 +34,13 @@ export function EnergyCheckIn({
     });
   }
 
-  const options: { key: Level; label: string }[] = [
-    { key: 'low', label: t('today.energy_low') },
-    { key: 'medium', label: t('today.energy_medium') },
-    { key: 'high', label: t('today.energy_high') },
-  ];
-
   return (
     <section className="space-y-3">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground font-medium">
         {t('today.energy_prompt')}
       </p>
       <div className="grid grid-cols-3 gap-2">
-        {options.map((o) => {
+        {OPTIONS.map((o) => {
           const selected = level === o.key;
           return (
             <button
@@ -51,13 +48,15 @@ export function EnergyCheckIn({
               type="button"
               onClick={() => set(o.key)}
               disabled={isPending}
-              className={`rounded-2xl border px-3 py-4 text-sm font-medium transition-colors ${
+              className={cn(
+                'rounded-2xl border px-3 py-4 text-center transition-all soft-shadow',
                 selected
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'hover:bg-accent/10'
-              }`}
+                  ? 'grad-primary text-primary-foreground border-transparent scale-[1.02]'
+                  : 'bg-card hover:scale-[1.02] hover:border-primary/40',
+              )}
             >
-              {o.label}
+              <div className={cn('text-2xl mb-1', selected && 'animate-pop')}>{o.emoji}</div>
+              <div className="text-xs font-semibold">{t(o.labelKey)}</div>
             </button>
           );
         })}

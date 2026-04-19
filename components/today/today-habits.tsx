@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Flame } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 type Habit = {
@@ -33,9 +33,10 @@ export function TodayHabits({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Vaner i dag
-      </h2>
+      <div className="flex items-center gap-2">
+        <Flame className="h-4 w-4 text-accent" />
+        <h2 className="text-sm font-semibold">Vaner i dag</h2>
+      </div>
       <ul className="space-y-2">
         {habits.map((h) => {
           const done = logged.has(h.id);
@@ -45,22 +46,27 @@ export function TodayHabits({
                 type="button"
                 onClick={() => toggle(h.id)}
                 disabled={isPending}
-                className="w-full text-left flex items-center gap-3 rounded-2xl border bg-card px-4 py-3 hover:bg-accent/10 transition-colors"
+                className={cn(
+                  'w-full text-left flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all card-hover soft-shadow',
+                  done ? 'bg-muted/60 border-border/50' : 'bg-card',
+                )}
               >
                 <span
                   className={cn(
-                    'h-5 w-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors',
-                    done ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40',
+                    'h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
+                    done
+                      ? 'grad-primary border-transparent text-primary-foreground'
+                      : 'border-muted-foreground/40',
                   )}
                 >
-                  {done && <Check className="h-3 w-3" strokeWidth={3} />}
+                  {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className={cn('text-sm font-medium', done && 'line-through text-muted-foreground')}>
+                  <div className={cn('text-sm font-medium', done && 'line-through text-muted-foreground')}>
                     {h.title}
-                  </span>
+                  </div>
                   {h.cue && (
-                    <span className="block text-xs text-muted-foreground">{h.cue}</span>
+                    <div className="text-xs text-muted-foreground mt-0.5">{h.cue}</div>
                   )}
                 </div>
               </button>

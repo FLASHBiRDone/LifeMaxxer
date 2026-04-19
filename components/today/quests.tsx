@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { Check, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { cn } from '@/lib/cn';
 
 type Quest = {
   id: string;
@@ -14,9 +16,7 @@ export function TodayQuests({ quests }: { quests: Quest[] }) {
   const [items, setItems] = useState(quests);
   const [isPending, startTransition] = useTransition();
 
-  if (items.length === 0) {
-    return null;
-  }
+  if (items.length === 0) return null;
 
   function toggle(quest: Quest) {
     const nextCompleted = quest.completed_at ? null : new Date().toISOString();
@@ -34,9 +34,10 @@ export function TodayQuests({ quests }: { quests: Quest[] }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        Hovedoppdrag
-      </h2>
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-primary" />
+        <h2 className="text-sm font-semibold">Dagens oppdrag</h2>
+      </div>
       <ul className="space-y-2">
         {items.map((q) => {
           const done = Boolean(q.completed_at);
@@ -46,23 +47,36 @@ export function TodayQuests({ quests }: { quests: Quest[] }) {
                 type="button"
                 onClick={() => toggle(q)}
                 disabled={isPending}
-                className="w-full text-left flex items-start gap-3 rounded-2xl border bg-card p-4 hover:bg-accent/10 transition-colors"
+                className={cn(
+                  'w-full text-left flex items-start gap-3 rounded-2xl border p-4 transition-all card-hover soft-shadow',
+                  done ? 'bg-muted/60 border-border/50' : 'bg-card',
+                  q.is_main && !done && 'border-primary/30',
+                )}
               >
                 <span
-                  className={`mt-1 h-5 w-5 rounded-full border-2 flex-shrink-0 ${
+                  className={cn(
+                    'mt-0.5 h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
                     done
-                      ? 'bg-primary border-primary'
-                      : 'border-muted-foreground/40'
-                  }`}
+                      ? 'grad-primary border-transparent text-primary-foreground'
+                      : 'border-muted-foreground/40',
+                  )}
                   aria-hidden
-                />
+                >
+                  {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                </span>
                 <span
-                  className={`flex-1 text-base leading-snug ${
-                    done ? 'line-through text-muted-foreground' : ''
-                  }`}
+                  className={cn(
+                    'flex-1 text-sm leading-snug font-medium',
+                    done && 'line-through text-muted-foreground',
+                  )}
                 >
                   {q.title}
                 </span>
+                {q.is_main && !done && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-primary flex-shrink-0 mt-1">
+                    hoved
+                  </span>
+                )}
               </button>
             </li>
           );

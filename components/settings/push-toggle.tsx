@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { Bell } from 'lucide-react';
 import { disablePush, enablePush } from '@/lib/push-client';
+import { cn } from '@/lib/cn';
 
 export function PushToggle({ initialEnabled }: { initialEnabled: boolean }) {
   const [enabled, setEnabled] = useState(initialEnabled);
@@ -33,28 +35,42 @@ export function PushToggle({ initialEnabled }: { initialEnabled: boolean }) {
   }
 
   return (
-    <section className="rounded-2xl border bg-card p-6 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-medium">Morgenvarsel</h2>
-          <p className="text-sm text-muted-foreground">
+    <section className="rounded-2xl border bg-card p-5 soft-shadow">
+      <div className="flex items-start gap-4">
+        <div className={cn(
+          'h-11 w-11 rounded-2xl flex items-center justify-center flex-shrink-0',
+          enabled ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+        )}>
+          <Bell className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">Morgenvarsel</h2>
+            <button
+              type="button"
+              onClick={toggle}
+              disabled={pending}
+              role="switch"
+              aria-checked={enabled}
+              className={cn(
+                'relative h-6 w-11 rounded-full transition-colors flex-shrink-0',
+                enabled ? 'grad-primary' : 'bg-muted',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                  enabled ? 'translate-x-5' : 'translate-x-0.5',
+                )}
+              />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
             Ett varsel klokken 07:30. Kun hvis du vil.
           </p>
+          {message && <p className="text-xs text-muted-foreground mt-2">{message}</p>}
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          disabled={pending}
-          className={`rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
-            enabled
-              ? 'bg-primary text-primary-foreground border-primary'
-              : 'hover:bg-accent/10'
-          }`}
-        >
-          {enabled ? 'På' : 'Av'}
-        </button>
       </div>
-      {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
     </section>
   );
 }
