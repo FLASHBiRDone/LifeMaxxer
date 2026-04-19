@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server';
 import { ChefHat, ChevronRight, Flame, ShoppingBasket, Sunrise } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PushToggle } from '@/components/settings/push-toggle';
+import { NotificationPreferences } from '@/components/settings/notification-prefs';
 import { GoogleCalendarCard } from '@/components/settings/google-calendar';
 import { SignOutButton } from '@/components/settings/sign-out';
 
@@ -22,7 +23,9 @@ export default async function SettingsPage({
   const [{ data: settings }, { data: gtok }] = await Promise.all([
     supabase
       .from('user_settings')
-      .select('push_enabled, morning_briefing_enabled')
+      .select(
+        'push_enabled, morning_briefing_enabled, dinner_panic_enabled, weekly_debrief_enabled',
+      )
       .eq('user_id', user.id)
       .maybeSingle(),
     supabase
@@ -65,6 +68,20 @@ export default async function SettingsPage({
       <div className="space-y-4">
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
+        <NotificationPreferences
+          pushEnabled={Boolean((settings as any)?.push_enabled)}
+          initial={{
+            morning_briefing_enabled: Boolean(
+              (settings as any)?.morning_briefing_enabled ?? true,
+            ),
+            dinner_panic_enabled: Boolean(
+              (settings as any)?.dinner_panic_enabled ?? false,
+            ),
+            weekly_debrief_enabled: Boolean(
+              (settings as any)?.weekly_debrief_enabled ?? true,
+            ),
+          }}
+        />
       </div>
 
       <div className="pt-4">
