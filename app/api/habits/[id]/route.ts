@@ -11,12 +11,11 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const allowed = ['title', 'description', 'cue', 'frequency', 'days_of_week', 'target_count', 'active'];
+  const allowed = ['name', 'kind', 'target_frequency', 'target_value', 'color', 'archived'];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];
   }
-  patch.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('habits')
@@ -41,7 +40,7 @@ export async function DELETE(
 
   const { error } = await supabase
     .from('habits')
-    .update({ active: false, updated_at: new Date().toISOString() })
+    .update({ archived: true })
     .eq('id', id)
     .eq('user_id', user.id);
 

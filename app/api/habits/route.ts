@@ -10,7 +10,7 @@ export async function GET() {
     .from('habits')
     .select('*')
     .eq('user_id', user.id)
-    .eq('active', true)
+    .eq('archived', false)
     .order('created_at', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -23,23 +23,22 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { title, description, cue, frequency, days_of_week, target_count } = body;
+  const { name, kind, target_frequency, target_value, color } = body;
 
-  if (!title?.trim()) {
-    return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+  if (!name?.trim()) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from('habits')
     .insert({
       user_id: user.id,
-      title: title.trim(),
-      description: description?.trim() || null,
-      cue: cue?.trim() || null,
-      frequency: frequency ?? 'daily',
-      days_of_week: days_of_week ?? [1, 2, 3, 4, 5, 6, 7],
-      target_count: target_count ?? 1,
-      active: true,
+      name: name.trim(),
+      kind: kind ?? 'do',
+      target_frequency: target_frequency ?? 'daily',
+      target_value: target_value ?? null,
+      color: color ?? 'emerald',
+      archived: false,
     })
     .select()
     .single();

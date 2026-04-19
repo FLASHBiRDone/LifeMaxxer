@@ -32,7 +32,6 @@ export default async function TodayPage() {
     { data: habits },
     { data: habitLogs },
     { data: gtok },
-    { data: profile },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -56,9 +55,9 @@ export default async function TodayPage() {
       .maybeSingle(),
     supabase
       .from('habits')
-      .select('id, title, cue, frequency, days_of_week')
+      .select('id, name, target_frequency')
       .eq('user_id', user.id)
-      .eq('active', true),
+      .eq('archived', false),
     supabase
       .from('habit_logs')
       .select('habit_id')
@@ -67,11 +66,6 @@ export default async function TodayPage() {
     supabase
       .from('google_tokens')
       .select('access_token, refresh_token, expires_at')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('user_profiles')
-      .select('display_name')
       .eq('user_id', user.id)
       .maybeSingle(),
   ]);
@@ -99,12 +93,11 @@ export default async function TodayPage() {
     } catch { /* Calendar fetch failing shouldn't break the page */ }
   }
 
-  const todayDow = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d; })();
-  const dueHabits = (habits ?? []).filter((h: any) => {
-    if (h.frequency === 'daily') return true;
-    if (h.frequency === 'weekly') return true;
-    return (h.days_of_week ?? []).includes(todayDow);
-  });
+  const dueHabits = ((habits as any[]) ?? []).map((h) => ({
+    id: h.id,
+    title: h.name,
+    cue: null as string | null,
+  }));
   const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
   const habitsDone = dueHabits.filter((h: any) => loggedSet.has(h.id)).length;
   const questsList = (quests as any[]) ?? [];
@@ -113,7 +106,7 @@ export default async function TodayPage() {
   return (
     <main className="container max-w-xl py-6 space-y-6">
       <TodayHero
-        name={(profile as any)?.display_name ?? null}
+        name={null}
         intro={briefing?.intro ?? null}
         habitsDone={habitsDone}
         habitsTotal={dueHabits.length}

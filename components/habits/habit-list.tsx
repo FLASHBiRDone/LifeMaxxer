@@ -9,13 +9,12 @@ import { cn } from '@/lib/cn';
 
 export type Habit = {
   id: string;
-  title: string;
-  description: string | null;
-  cue: string | null;
-  frequency: string;
-  days_of_week: number[];
-  target_count: number;
-  active: boolean;
+  name: string;
+  kind: 'do' | 'avoid' | 'measure';
+  target_frequency: string;
+  target_value: number | null;
+  color: string;
+  archived: boolean;
 };
 
 type LoggedSet = Set<string>;
@@ -23,16 +22,13 @@ type LoggedSet = Set<string>;
 const FREQ_LABEL: Record<string, string> = {
   daily: 'Daglig',
   weekly: 'Ukentlig',
-  custom: 'Tilpasset',
 };
 
-function isDueToday(habit: Habit): boolean {
-  if (habit.frequency === 'daily') return true;
-  if (habit.frequency === 'weekly') return true;
-  const dow = new Date().getDay();
-  const iso = dow === 0 ? 7 : dow;
-  return (habit.days_of_week ?? []).includes(iso);
-}
+const KIND_EMOJI: Record<string, string> = {
+  do: '✨',
+  avoid: '🛑',
+  measure: '📊',
+};
 
 export function HabitList({
   habits: initialHabits,
@@ -93,8 +89,7 @@ export function HabitList({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          summary: habit.title,
-          description: habit.cue ? `Trigger: ${habit.cue}` : undefined,
+          summary: habit.name,
           start: start.toISOString(),
           end: end.toISOString(),
           colorId: '2',
@@ -115,9 +110,7 @@ export function HabitList({
     setHabits((prev) => prev.filter((h) => h.id !== id));
   }
 
-  const dueToday = habits.filter(isDueToday);
-  const notDueToday = habits.filter((h) => !isDueToday(h));
-  const doneCount = dueToday.filter((h) => loggedToday.has(h.id)).length;
+  const doneCount = habits.filter((h) => loggedToday.has(h.id)).length;
 
   return (
     <div className="space-y-6">
@@ -129,19 +122,19 @@ export function HabitList({
           <h1 className="text-3xl font-bold">Vaner</h1>
         </div>
 
-        {dueToday.length > 0 && (
+        {habits.length > 0 && (
           <div className="rounded-2xl grad-hero border p-4 flex items-center gap-4">
             <div className="flex-shrink-0 h-12 w-12 rounded-2xl grad-primary flex items-center justify-center text-primary-foreground">
               <Flame className="h-6 w-6" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">
-                {doneCount} av {dueToday.length} vaner gjort i dag
+                {doneCount} av {habits.length} vaner gjort i dag
               </p>
               <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full grad-primary transition-all duration-500"
-                  style={{ width: `${(doneCount / Math.max(1, dueToday.length)) * 100}%` }}
+                  style={{ width: `${(doneCount / Math.max(1, habits.length)) * 100}%` }}
                 />
               </div>
             </div>
@@ -165,53 +158,21 @@ export function HabitList({
           </Button>
         </div>
       ) : (
-        <>
-          {dueToday.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                I dag
-              </h2>
-              <ul className="space-y-2">
-                {dueToday.map((habit) => (
-                  <HabitCard
-                    key={habit.id}
-                    habit={habit}
-                    logged={loggedToday.has(habit.id)}
-                    onToggle={() => toggleLog(habit)}
-                    onEdit={() => { setEditing(habit); setFormOpen(true); }}
-                    onDelete={() => deleteHabit(habit.id)}
-                    onAddToCalendar={() => addToCalendar(habit)}
-                    addingCalendar={addingCalendar === habit.id}
-                    disabled={isPending}
-                  />
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {notDueToday.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Andre dager
-              </h2>
-              <ul className="space-y-2">
-                {notDueToday.map((habit) => (
-                  <HabitCard
-                    key={habit.id}
-                    habit={habit}
-                    logged={loggedToday.has(habit.id)}
-                    onToggle={() => toggleLog(habit)}
-                    onEdit={() => { setEditing(habit); setFormOpen(true); }}
-                    onDelete={() => deleteHabit(habit.id)}
-                    onAddToCalendar={() => addToCalendar(habit)}
-                    addingCalendar={addingCalendar === habit.id}
-                    disabled
-                  />
-                ))}
-              </ul>
-            </section>
-          )}
-        </>
+        <ul className="space-y-2">
+          {habits.map((habit) => (
+            <HabitCard
+              key={habit.id}
+              habit={habit}
+              logged={loggedToday.has(habit.id)}
+              onToggle={() => toggleLog(habit)}
+              onEdit={() => { setEditing(habit); setFormOpen(true); }}
+              onDelete={() => deleteHabit(habit.id)}
+              onAddToCalendar={() => addToCalendar(habit)}
+              addingCalendar={addingCalendar === habit.id}
+              disabled={isPending}
+            />
+          ))}
+        </ul>
       )}
 
       <HabitForm
@@ -219,12 +180,10 @@ export function HabitList({
         onOpenChange={(o) => { setFormOpen(o); if (!o) setEditing(null); }}
         initial={editing ? {
           id: editing.id,
-          title: editing.title,
-          description: editing.description ?? undefined,
-          cue: editing.cue ?? undefined,
-          frequency: editing.frequency as 'daily' | 'weekly' | 'custom',
-          days_of_week: editing.days_of_week,
-          target_count: editing.target_count,
+          name: editing.name,
+          kind: editing.kind,
+          target_frequency: editing.target_frequency as 'daily' | 'weekly',
+          color: editing.color,
         } : undefined}
         onSave={handleSave}
       />
@@ -281,13 +240,13 @@ function HabitCard({
 
         <div className="flex-1 min-w-0 pt-0.5">
           <p className={cn('text-sm font-semibold leading-snug', logged && 'line-through text-muted-foreground')}>
-            {habit.title}
+            <span className="mr-1.5">{KIND_EMOJI[habit.kind] ?? '✨'}</span>
+            {habit.name}
           </p>
-          {habit.cue && (
-            <p className="text-xs text-muted-foreground mt-1">{habit.cue}</p>
-          )}
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <Badge variant="secondary">{FREQ_LABEL[habit.frequency] ?? habit.frequency}</Badge>
+            <Badge variant="secondary">
+              {FREQ_LABEL[habit.target_frequency] ?? habit.target_frequency}
+            </Badge>
             {logged && <Badge variant="success">✓ Gjort</Badge>}
           </div>
         </div>

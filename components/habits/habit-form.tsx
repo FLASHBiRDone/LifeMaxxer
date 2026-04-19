@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -15,24 +14,18 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/cn';
 
-const DAYS = ['Ma', 'Ti', 'On', 'To', 'Fr', 'Lø', 'Sø'];
-
 export type HabitDraft = {
-  title: string;
-  description: string;
-  cue: string;
-  frequency: 'daily' | 'weekly' | 'custom';
-  days_of_week: number[];
-  target_count: number;
+  name: string;
+  kind: 'do' | 'avoid' | 'measure';
+  target_frequency: 'daily' | 'weekly';
+  color: string;
 };
 
 const empty: HabitDraft = {
-  title: '',
-  description: '',
-  cue: '',
-  frequency: 'daily',
-  days_of_week: [1, 2, 3, 4, 5, 6, 7],
-  target_count: 1,
+  name: '',
+  kind: 'do',
+  target_frequency: 'daily',
+  color: 'emerald',
 };
 
 interface HabitFormProps {
@@ -47,24 +40,16 @@ export function HabitForm({ open, onOpenChange, initial, onSave }: HabitFormProp
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (open) setDraft({ ...empty, ...initial });
+  }, [open, initial]);
+
   function set<K extends keyof HabitDraft>(key: K, val: HabitDraft[K]) {
     setDraft((d) => ({ ...d, [key]: val }));
   }
 
-  function toggleDay(day: number) {
-    setDraft((d) => {
-      const has = d.days_of_week.includes(day);
-      return {
-        ...d,
-        days_of_week: has
-          ? d.days_of_week.filter((x) => x !== day)
-          : [...d.days_of_week, day].sort(),
-      };
-    });
-  }
-
   async function handleSave() {
-    if (!draft.title.trim()) { setError('Gi vanen et navn'); return; }
+    if (!draft.name.trim()) { setError('Gi vanen et navn'); return; }
     setSaving(true);
     setError(null);
     try {
@@ -78,6 +63,12 @@ export function HabitForm({ open, onOpenChange, initial, onSave }: HabitFormProp
     }
   }
 
+  const KINDS: { k: HabitDraft['kind']; label: string; emoji: string }[] = [
+    { k: 'do', label: 'Gjør', emoji: '✨' },
+    { k: 'avoid', label: 'Unngå', emoji: '🛑' },
+    { k: 'measure', label: 'Mål', emoji: '📊' },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="mx-4 max-w-md">
@@ -87,84 +78,58 @@ export function HabitForm({ open, onOpenChange, initial, onSave }: HabitFormProp
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="habit-title">Navn</Label>
+            <Label htmlFor="habit-name">Navn</Label>
             <Input
-              id="habit-title"
+              id="habit-name"
               placeholder="Mediter 10 minutter"
-              value={draft.title}
-              onChange={(e) => set('title', e.target.value)}
+              value={draft.name}
+              onChange={(e) => set('name', e.target.value)}
               autoFocus
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="habit-cue">Trigger / når</Label>
-            <Input
-              id="habit-cue"
-              placeholder="Etter frokost"
-              value={draft.cue}
-              onChange={(e) => set('cue', e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="habit-desc">Notat (valgfritt)</Label>
-            <Textarea
-              id="habit-desc"
-              placeholder="Hva er poenget med denne vanen?"
-              value={draft.description}
-              onChange={(e) => set('description', e.target.value)}
-              rows={2}
-            />
-          </div>
-
           <div className="space-y-2">
-            <Label>Frekvens</Label>
-            <div className="flex gap-2">
-              {(['daily', 'weekly', 'custom'] as const).map((f) => (
+            <Label>Type</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {KINDS.map(({ k, label, emoji }) => (
                 <button
-                  key={f}
+                  key={k}
                   type="button"
-                  onClick={() => set('frequency', f)}
+                  onClick={() => set('kind', k)}
                   className={cn(
-                    'flex-1 rounded-xl border py-2 text-xs font-medium transition-colors',
-                    draft.frequency === f
+                    'rounded-xl border py-3 text-xs font-medium transition-colors flex flex-col items-center gap-1',
+                    draft.kind === k
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'hover:bg-accent/10',
                   )}
                 >
-                  {f === 'daily' ? 'Daglig' : f === 'weekly' ? 'Ukentlig' : 'Tilpasset'}
+                  <span className="text-lg">{emoji}</span>
+                  {label}
                 </button>
               ))}
             </div>
           </div>
 
-          {draft.frequency === 'custom' && (
-            <div className="space-y-2">
-              <Label>Dager</Label>
-              <div className="flex gap-1.5">
-                {DAYS.map((name, i) => {
-                  const day = i + 1;
-                  const active = draft.days_of_week.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleDay(day)}
-                      className={cn(
-                        'flex-1 rounded-lg py-2 text-xs font-medium transition-colors',
-                        active
-                          ? 'bg-primary text-primary-foreground'
-                          : 'border hover:bg-accent/10',
-                      )}
-                    >
-                      {name}
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="space-y-2">
+            <Label>Frekvens</Label>
+            <div className="flex gap-2">
+              {(['daily', 'weekly'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => set('target_frequency', f)}
+                  className={cn(
+                    'flex-1 rounded-xl border py-2.5 text-xs font-medium transition-colors',
+                    draft.target_frequency === f
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'hover:bg-accent/10',
+                  )}
+                >
+                  {f === 'daily' ? 'Daglig' : 'Ukentlig'}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
         </div>
 
         {error && <p className="text-xs text-destructive mt-3">{error}</p>}

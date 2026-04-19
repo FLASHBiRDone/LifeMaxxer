@@ -17,7 +17,7 @@ export default async function HabitsPage() {
       .from('habits')
       .select('*')
       .eq('user_id', user.id)
-      .eq('active', true)
+      .eq('archived', false)
       .order('created_at', { ascending: true }),
     supabase
       .from('habit_logs')
