@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Sunrise, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { osloDayBounds, osloWeekDays } from '@/lib/time';
 import { TodayQuests } from '@/components/today/quests';
@@ -100,8 +102,27 @@ export default async function TodayPage() {
     0,
   );
 
+  const hour = new Date().getHours();
+  const showMorningRitual = !mana && hour < 12;
+
   return (
     <main className="container max-w-xl py-6 space-y-5">
+      {showMorningRitual && (
+        <Link
+          href="/gm"
+          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 hover:bg-primary/10 transition-colors soft-shadow"
+        >
+          <div className="h-9 w-9 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+            <Sunrise className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">Start dagen rolig</p>
+            <p className="text-[11px] text-muted-foreground">Morgen-ritual · 30 sekunder</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
+        </Link>
+      )}
+
       <TodayHero
         intro={briefing?.intro ?? null}
         habitsDone={habitsDone}

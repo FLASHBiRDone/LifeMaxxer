@@ -13,7 +13,7 @@ const tabs = [
   { href: '/settings', icon: Settings, label: 'Meg' },
 ];
 
-const HIDE_ON = ['/login', '/auth', '/onboarding'];
+const HIDE_ON = ['/login', '/auth', '/onboarding', '/gm'];
 
 export function BottomNav() {
   const pathname = usePathname();
