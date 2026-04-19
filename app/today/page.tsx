@@ -1,13 +1,11 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { osloDayBounds } from '@/lib/time';
+import { osloDayBounds, osloWeekDays } from '@/lib/time';
 import { TodayQuests } from '@/components/today/quests';
 import { EnergyCheckIn } from '@/components/today/energy';
 import { RunBriefingButton } from '@/components/today/run-briefing';
-import { TodayHabits } from '@/components/today/today-habits';
-import { CalendarStrip } from '@/components/today/calendar-strip';
+import { WeekHabitGrid } from '@/components/today/week-habit-grid';
 import { TodayHero } from '@/components/today/hero';
-import { authorizedClient, listEvents } from '@/lib/google';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +21,10 @@ export default async function TodayPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { dateString, start, end } = osloDayBounds();
+  const { dateString } = osloDayBounds();
+  const weekDays = osloWeekDays();
+  const weekStart = weekDays[0].start.toISOString();
+  const weekEnd = weekDays[6].end.toISOString();
 
   const [
     { data: briefingRow },
@@ -31,7 +32,7 @@ export default async function TodayPage() {
     { data: mana },
     { data: habits },
     { data: habitLogs },
-    { data: gtok },
+    { data: weekHabitLogs },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -55,7 +56,7 @@ export default async function TodayPage() {
       .maybeSingle(),
     supabase
       .from('habits')
-      .select('id, name, target_frequency')
+      .select('id, name, color')
       .eq('user_id', user.id)
       .eq('archived', false),
     supabase
@@ -64,10 +65,11 @@ export default async function TodayPage() {
       .eq('user_id', user.id)
       .eq('logged_for', dateString),
     supabase
-      .from('google_tokens')
-      .select('access_token, refresh_token, expires_at')
+      .from('habit_logs')
+      .select('habit_id, logged_for')
       .eq('user_id', user.id)
-      .maybeSingle(),
+      .gte('logged_for', weekDays[0].dateString)
+      .lte('logged_for', weekDays[6].dateString),
   ]);
 
   let briefing: BriefingOutput | null = null;
@@ -75,57 +77,56 @@ export default async function TodayPage() {
     try { briefing = JSON.parse(briefingRow.content) as BriefingOutput; } catch { /* */ }
   }
 
-  let calEvents: { id: string; title: string; start: string; end: string }[] = [];
-  if (gtok) {
-    try {
-      const { client, rotated } = await authorizedClient({
-        access_token: gtok.access_token,
-        refresh_token: gtok.refresh_token,
-        expires_at: gtok.expires_at,
-      });
-      if (rotated) {
-        await supabase
-          .from('google_tokens')
-          .update({ access_token: rotated.access_token, expires_at: rotated.expires_at })
-          .eq('user_id', user.id);
-      }
-      calEvents = await listEvents(client, start, end);
-    } catch { /* Calendar fetch failing shouldn't break the page */ }
+  const habitsList = (habits as any[]) ?? [];
+  const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
+
+  // Build weekLogs: habit_id → dateString[]
+  const weekLogs: Record<string, string[]> = {};
+  for (const log of (weekHabitLogs as any[]) ?? []) {
+    if (!weekLogs[log.habit_id]) weekLogs[log.habit_id] = [];
+    weekLogs[log.habit_id].push(log.logged_for);
   }
 
-  const dueHabits = ((habits as any[]) ?? []).map((h) => ({
-    id: h.id,
-    title: h.name,
-    cue: null as string | null,
-  }));
-  const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
-  const habitsDone = dueHabits.filter((h: any) => loggedSet.has(h.id)).length;
+  const habitsDone = habitsList.filter((h: any) => loggedSet.has(h.id)).length;
   const questsList = (quests as any[]) ?? [];
   const questsDone = questsList.filter((q) => q.completed_at).length;
 
+  // Count unique habit×day pairs logged this week (past + today only)
+  const todayIdx = weekDays.findIndex((d) => d.dateString === dateString);
+  const daysElapsed = todayIdx + 1;
+  const weekHabitsTotal = habitsList.length * daysElapsed;
+  const weekHabitsDone = Object.values(weekLogs).reduce(
+    (sum, dates) => sum + dates.filter((d) => d <= dateString).length,
+    0,
+  );
+
   return (
-    <main className="container max-w-xl py-6 space-y-6">
+    <main className="container max-w-xl py-6 space-y-5">
       <TodayHero
-        name={null}
         intro={briefing?.intro ?? null}
         habitsDone={habitsDone}
-        habitsTotal={dueHabits.length}
+        habitsTotal={habitsList.length}
         questsDone={questsDone}
         questsTotal={questsList.length}
-        energyLevel={(mana as any)?.level ?? null}
+        energyLevel={(mana as any)?.level as Level | null ?? null}
+        weekDays={weekDays}
+        todayString={dateString}
+        weekHabitsDone={weekHabitsDone}
+        weekHabitsTotal={weekHabitsTotal}
+      />
+
+      <TodayQuests quests={questsList} />
+
+      <WeekHabitGrid
+        habits={habitsList}
+        weekDays={weekDays}
+        todayString={dateString}
+        weekLogs={weekLogs}
       />
 
       <EnergyCheckIn initialLevel={(mana as any)?.level as Level | null ?? null} />
 
-      {calEvents.length > 0 && <CalendarStrip events={calEvents} />}
-
-      <TodayQuests quests={questsList} />
-
-      {dueHabits.length > 0 && (
-        <TodayHabits habits={dueHabits as any[]} loggedIds={[...loggedSet] as string[]} />
-      )}
-
-      <div className="pt-2">
+      <div className="pt-1">
         <RunBriefingButton hasBriefing={Boolean(briefing)} />
       </div>
     </main>
