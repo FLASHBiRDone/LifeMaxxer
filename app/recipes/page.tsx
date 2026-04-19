@@ -1,13 +1,33 @@
-import { getTranslations } from 'next-intl/server';
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import { RecipesClient } from '@/components/recipes/recipes-client';
+
+export const dynamic = 'force-dynamic';
 
 export default async function RecipesPage() {
-  const t = await getTranslations();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: planRow } = await supabase
+    .from('ai_messages')
+    .select('content, created_at')
+    .eq('user_id', user.id)
+    .eq('context_type', 'meal_plan')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let initialPlan: any = null;
+  if (planRow?.content) {
+    try {
+      initialPlan = JSON.parse(planRow.content);
+    } catch { /* ignore */ }
+  }
+
   return (
-    <main className="container max-w-xl py-10 space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t('nav.recipes')}
-      </h1>
-      <p className="text-xs text-muted-foreground">Lands in Phase 5.</p>
+    <main className="container max-w-xl py-6">
+      <RecipesClient initialPlan={initialPlan} />
     </main>
   );
 }
