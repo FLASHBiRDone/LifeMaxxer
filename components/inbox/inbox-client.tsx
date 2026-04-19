@@ -2,11 +2,34 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Brain, Sparkles, Target, Flame, Trash2, Loader2, Send, Check } from 'lucide-react';
+import { Brain, Sparkles, Target, Flame, Trash2, Loader2, Send, Check, CalendarPlus, CalendarClock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { VoiceButton } from './voice-button';
 import { cn } from '@/lib/cn';
+
+function defaultScheduleStart(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + 60, 0, 0);
+  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function addMinutesToLocal(local: string, mins: number): string {
+  const d = new Date(local);
+  d.setMinutes(d.getMinutes() + mins);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const DURATIONS = [
+  { min: 15, label: '15m' },
+  { min: 30, label: '30m' },
+  { min: 60, label: '1t' },
+  { min: 90, label: '1,5t' },
+];
 
 type Item = {
   id: string;
@@ -21,7 +44,13 @@ type Suggestion = {
   reason: string;
 };
 
-export function InboxClient({ initialItems }: { initialItems: Item[] }) {
+export function InboxClient({
+  initialItems,
+  googleConnected,
+}: {
+  initialItems: Item[];
+  googleConnected: boolean;
+}) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>(initialItems);
   const [draft, setDraft] = useState('');
@@ -29,6 +58,10 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
   const [sorting, setSorting] = useState(false);
   const [sortError, setSortError] = useState<string | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleStart, setScheduleStart] = useState(defaultScheduleStart());
+  const [scheduleDuration, setScheduleDuration] = useState(30);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, Suggestion>>({});
   const [, startTransition] = useTransition();
 
@@ -37,17 +70,42 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
     const content = draft.trim();
     if (!content) return;
     setSaving(true);
+    setScheduleError(null);
     try {
-      const res = await fetch('/api/inbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) {
-        const { item } = await res.json();
-        setItems((prev) => [item, ...prev]);
+      if (scheduleOpen) {
+        const endLocal = addMinutesToLocal(scheduleStart, scheduleDuration);
+        const res = await fetch('/api/inbox/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            startAt: new Date(scheduleStart).toISOString(),
+            endAt: new Date(endLocal).toISOString(),
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? 'Kunne ikke planlegge');
+        }
         setDraft('');
+        setScheduleOpen(false);
+        setScheduleStart(defaultScheduleStart());
+        setScheduleDuration(30);
+        router.refresh();
+      } else {
+        const res = await fetch('/api/inbox', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        if (res.ok) {
+          const { item } = await res.json();
+          setItems((prev) => [item, ...prev]);
+          setDraft('');
+        }
       }
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
       setSaving(false);
     }
@@ -125,6 +183,7 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
           maxLength={2000}
           className="resize-none"
         />
+
         <div className="flex gap-2">
           <VoiceButton
             disabled={saving}
@@ -134,15 +193,83 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
             }}
             onError={(msg) => setVoiceError(msg)}
           />
+          <button
+            type="button"
+            onClick={() => {
+              setScheduleOpen((v) => !v);
+              setScheduleError(null);
+            }}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors',
+              scheduleOpen
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
+            )}
+            aria-pressed={scheduleOpen}
+          >
+            {scheduleOpen ? <X className="h-3.5 w-3.5" /> : <CalendarPlus className="h-3.5 w-3.5" />}
+            {scheduleOpen ? 'Avbryt tid' : 'Sett tid'}
+          </button>
           <Button
             type="submit"
             disabled={saving || !draft.trim()}
             className="flex-1 grad-primary text-primary-foreground border-transparent"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4 mr-1.5" /> Legg til</>}
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : scheduleOpen ? (
+              <><CalendarClock className="h-4 w-4 mr-1.5" /> Planlegg</>
+            ) : (
+              <><Send className="h-4 w-4 mr-1.5" /> Legg til</>
+            )}
           </Button>
         </div>
+
+        {scheduleOpen && (
+          <div className="rounded-2xl border bg-muted/40 p-3 space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Tidspunkt
+              </label>
+              <Input
+                type="datetime-local"
+                value={scheduleStart}
+                onChange={(e) => setScheduleStart(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                Varighet
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {DURATIONS.map((d) => (
+                  <button
+                    key={d.min}
+                    type="button"
+                    onClick={() => setScheduleDuration(d.min)}
+                    className={cn(
+                      'rounded-xl border py-2 text-xs font-medium transition-colors',
+                      scheduleDuration === d.min
+                        ? 'grad-primary text-primary-foreground border-transparent'
+                        : 'bg-background hover:border-primary/40',
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {googleConnected
+                ? 'Legges i Google Kalender og som dagens oppdrag.'
+                : 'Legges som oppdrag. Koble Google Kalender i Innstillinger for kalenderhendelse.'}
+            </p>
+          </div>
+        )}
+
         {voiceError && <p className="text-xs text-destructive">{voiceError}</p>}
+        {scheduleError && <p className="text-xs text-destructive">{scheduleError}</p>}
       </form>
 
       {items.length > 0 && (
