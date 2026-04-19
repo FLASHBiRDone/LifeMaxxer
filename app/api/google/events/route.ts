@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authorizedClient, createEvent } from '@/lib/google';
-import { decrypt } from '@/lib/crypto';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -38,13 +37,28 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id);
   }
 
+  const startDate = new Date(start);
+  const endDate = new Date(end);
   const eventId = await createEvent(client, {
     summary,
     description,
-    start: new Date(start),
-    end: new Date(end),
+    start: startDate,
+    end: endDate,
     colorId: body.colorId,
   });
+
+  await supabase.from('calendar_events').upsert(
+    {
+      user_id: user.id,
+      google_event_id: eventId,
+      title: summary,
+      start_at: startDate.toISOString(),
+      end_at: endDate.toISOString(),
+      description: description ?? null,
+      last_synced_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,google_event_id' },
+  );
 
   return NextResponse.json({ eventId }, { status: 201 });
 }

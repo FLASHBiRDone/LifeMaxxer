@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, Flame, Inbox, Settings, Sparkles } from 'lucide-react';
+import { BarChart3, CalendarDays, Flame, Settings, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const tabs = [
   { href: '/today', icon: Sparkles, label: 'I dag' },
   { href: '/habits', icon: Flame, label: 'Vaner' },
-  { href: '/inbox', icon: Inbox, label: 'Innboks' },
-  { href: '/stats', icon: CalendarDays, label: 'Statistikk' },
+  { href: '/calendar', icon: CalendarDays, label: 'Kalender' },
+  { href: '/stats', icon: BarChart3, label: 'Statistikk' },
   { href: '/settings', icon: Settings, label: 'Meg' },
 ];
 
