@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeProvider } from '@/components/shared/theme-provider';
+import { BottomNav } from '@/components/shared/nav';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -41,7 +42,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className="min-h-dvh antialiased">
+      <body className="min-h-dvh antialiased pb-[calc(4rem+env(safe-area-inset-bottom))]">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -50,6 +51,7 @@ export default async function RootLayout({
         >
           <NextIntlClientProvider locale={locale} messages={messages}>
             {children}
+            <BottomNav />
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

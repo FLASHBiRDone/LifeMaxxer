@@ -108,3 +108,29 @@ export async function listEvents(
       description: e.description ?? null,
     }));
 }
+
+export type NewCalendarEvent = {
+  summary: string;
+  description?: string;
+  start: Date;
+  end: Date;
+  colorId?: string;
+};
+
+export async function createEvent(
+  auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
+  event: NewCalendarEvent,
+): Promise<string> {
+  const calendar = google.calendar({ version: 'v3', auth });
+  const res = await calendar.events.insert({
+    calendarId: 'primary',
+    requestBody: {
+      summary: event.summary,
+      description: event.description,
+      colorId: event.colorId,
+      start: { dateTime: event.start.toISOString() },
+      end: { dateTime: event.end.toISOString() },
+    },
+  });
+  return res.data.id!;
+}
