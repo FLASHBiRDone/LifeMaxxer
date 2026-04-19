@@ -130,7 +130,36 @@ export async function createEvent(
       colorId: event.colorId,
       start: { dateTime: event.start.toISOString() },
       end: { dateTime: event.end.toISOString() },
+      reminders: {
+        useDefault: false,
+        overrides: [{ method: 'popup', minutes: 30 }],
+      },
     },
   });
   return res.data.id!;
+}
+
+export type EventPatch = {
+  summary?: string;
+  description?: string;
+  start?: Date;
+  end?: Date;
+};
+
+export async function patchEvent(
+  auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
+  googleEventId: string,
+  patch: EventPatch,
+): Promise<void> {
+  const calendar = google.calendar({ version: 'v3', auth });
+  const requestBody: calendar_v3.Schema$Event = {};
+  if (patch.summary !== undefined) requestBody.summary = patch.summary;
+  if (patch.description !== undefined) requestBody.description = patch.description;
+  if (patch.start) requestBody.start = { dateTime: patch.start.toISOString() };
+  if (patch.end) requestBody.end = { dateTime: patch.end.toISOString() };
+  await calendar.events.patch({
+    calendarId: 'primary',
+    eventId: googleEventId,
+    requestBody,
+  });
 }

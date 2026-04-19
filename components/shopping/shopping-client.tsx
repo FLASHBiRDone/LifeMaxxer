@@ -2,9 +2,19 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingBasket, Check, Plus, Trash2, Loader2 } from 'lucide-react';
+import {
+  ShoppingBasket,
+  Check,
+  Plus,
+  Trash2,
+  Loader2,
+  CalendarPlus,
+  CalendarCheck,
+  RefreshCw,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ScheduleShoppingDialog } from './schedule-dialog';
 import { cn } from '@/lib/cn';
 
 type Item = {
@@ -14,12 +24,30 @@ type Item = {
   created_at: string;
 };
 
-export function ShoppingClient({ initialItems }: { initialItems: Item[] }) {
+type PendingEvent = {
+  id: string;
+  start_at: string;
+  end_at: string;
+} | null;
+
+export function ShoppingClient({
+  initialItems,
+  initialPendingEvent,
+  googleConnected,
+}: {
+  initialItems: Item[];
+  initialPendingEvent: PendingEvent;
+  googleConnected: boolean;
+}) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>(initialItems);
+  const [pendingEvent, setPendingEvent] = useState<PendingEvent>(initialPendingEvent);
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncedOk, setSyncedOk] = useState(false);
   const [, startTransition] = useTransition();
 
   const unchecked = items.filter((i) => !i.checked);
@@ -63,6 +91,17 @@ export function ShoppingClient({ initialItems }: { initialItems: Item[] }) {
     startTransition(async () => {
       await fetch(`/api/shopping/${id}`, { method: 'DELETE' });
     });
+  }
+
+  async function syncShoppingEvent() {
+    setSyncing(true);
+    setSyncedOk(false);
+    try {
+      const res = await fetch('/api/shopping/sync-event', { method: 'POST' });
+      if (res.ok) setSyncedOk(true);
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function clearChecked() {
@@ -114,6 +153,31 @@ export function ShoppingClient({ initialItems }: { initialItems: Item[] }) {
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </form>
+
+      {pendingEvent ? (
+        <PendingEventBanner
+          event={pendingEvent}
+          syncing={syncing}
+          syncedOk={syncedOk}
+          onSync={syncShoppingEvent}
+        />
+      ) : googleConnected && unchecked.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setScheduleOpen(true)}
+          className="flex items-center gap-3 w-full rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 hover:bg-primary/10 transition-colors soft-shadow"
+        >
+          <div className="h-9 w-9 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+            <CalendarPlus className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-semibold">Planlegg handling</p>
+            <p className="text-[11px] text-muted-foreground">
+              Legg listen i kalenderen din
+            </p>
+          </div>
+        </button>
+      ) : null}
 
       {items.length === 0 ? (
         <div className="rounded-3xl border bg-card p-10 text-center space-y-2 soft-shadow">
@@ -204,6 +268,76 @@ export function ShoppingClient({ initialItems }: { initialItems: Item[] }) {
           )}
         </>
       )}
+
+      <ScheduleShoppingDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        itemCount={unchecked.length}
+        onScheduled={() => {
+          setScheduleOpen(false);
+          router.refresh();
+        }}
+      />
+    </div>
+  );
+}
+
+function formatWhen(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  const day = start.toLocaleDateString('nb-NO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const from = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+  const to = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  return `${day.charAt(0).toUpperCase()}${day.slice(1)} · ${from}–${to}`;
+}
+
+function PendingEventBanner({
+  event,
+  syncing,
+  syncedOk,
+  onSync,
+}: {
+  event: NonNullable<PendingEvent>;
+  syncing: boolean;
+  syncedOk: boolean;
+  onSync: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 soft-shadow">
+      <div className="h-9 w-9 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+        <CalendarCheck className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold">Planlagt handling</p>
+        <p className="text-[11px] text-muted-foreground truncate">
+          {formatWhen(event.start_at, event.end_at)}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onSync}
+        disabled={syncing}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold border transition-colors flex-shrink-0',
+          syncedOk
+            ? 'bg-primary/10 border-primary/30 text-primary'
+            : 'bg-background hover:border-primary/40',
+        )}
+      >
+        {syncing ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : syncedOk ? (
+          <Check className="h-3 w-3" />
+        ) : (
+          <RefreshCw className="h-3 w-3" />
+        )}
+        {syncedOk ? 'Synket' : 'Synk liste'}
+      </button>
     </div>
   );
 }
