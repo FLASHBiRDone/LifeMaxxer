@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Brain, Sparkles, Target, Flame, Trash2, Loader2, Send, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceButton } from './voice-button';
 import { cn } from '@/lib/cn';
 
 type Item = {
@@ -27,6 +28,7 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
   const [saving, setSaving] = useState(false);
   const [sorting, setSorting] = useState(false);
   const [sortError, setSortError] = useState<string | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, Suggestion>>({});
   const [, startTransition] = useTransition();
 
@@ -124,6 +126,14 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
           className="resize-none"
         />
         <div className="flex gap-2">
+          <VoiceButton
+            disabled={saving}
+            onTranscribed={(text) => {
+              setVoiceError(null);
+              setDraft((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+            }}
+            onError={(msg) => setVoiceError(msg)}
+          />
           <Button
             type="submit"
             disabled={saving || !draft.trim()}
@@ -132,6 +142,7 @@ export function InboxClient({ initialItems }: { initialItems: Item[] }) {
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-4 w-4 mr-1.5" /> Legg til</>}
           </Button>
         </div>
+        {voiceError && <p className="text-xs text-destructive">{voiceError}</p>}
       </form>
 
       {items.length > 0 && (
