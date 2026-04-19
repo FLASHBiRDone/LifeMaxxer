@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Check } from 'lucide-react';
+import Link from 'next/link';
+import { Check, Settings2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 type WeekDay = { dateString: string; dayShort: string; dayNum: number };
@@ -43,9 +44,17 @@ export function WeekHabitGrid({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">
-        Vaner denne uken
-      </h2>
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Vaner denne uken
+        </h2>
+        <Link
+          href="/habits"
+          className="text-[10px] font-semibold text-primary inline-flex items-center gap-1 hover:opacity-80"
+        >
+          <Settings2 className="h-3 w-3" /> Administrer
+        </Link>
+      </div>
 
       <div className="rounded-3xl border bg-card soft-shadow overflow-hidden">
         {/* header row */}

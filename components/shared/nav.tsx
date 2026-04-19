@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, Flame, Settings, Sparkles } from 'lucide-react';
+import { BarChart3, Brain, CalendarDays, Settings, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const tabs = [
   { href: '/today', icon: Sparkles, label: 'I dag' },
-  { href: '/habits', icon: Flame, label: 'Vaner' },
+  { href: '/inbox', icon: Brain, label: 'Inbox' },
   { href: '/calendar', icon: CalendarDays, label: 'Kalender' },
   { href: '/stats', icon: BarChart3, label: 'Statistikk' },
   { href: '/settings', icon: Settings, label: 'Meg' },
