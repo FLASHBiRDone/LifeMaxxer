@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
+import { ChevronRight, Flame, ShoppingBasket } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PushToggle } from '@/components/settings/push-toggle';
 import { GoogleCalendarCard } from '@/components/settings/google-calendar';
@@ -48,6 +50,16 @@ export default async function SettingsPage({
         </div>
       </header>
 
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">
+          Snarveier
+        </h2>
+        <div className="rounded-2xl border bg-card overflow-hidden divide-y divide-border/50 soft-shadow">
+          <ShortcutLink href="/shopping" icon={<ShoppingBasket className="h-5 w-5" />} label="Handleliste" />
+          <ShortcutLink href="/habits" icon={<Flame className="h-5 w-5" />} label="Administrer vaner" />
+        </div>
+      </section>
+
       <div className="space-y-4">
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
@@ -57,5 +69,25 @@ export default async function SettingsPage({
         <SignOutButton />
       </div>
     </main>
+  );
+}
+
+function ShortcutLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <Link href={href} className="flex items-center gap-3 px-4 py-3.5 hover:bg-accent/5 transition-colors">
+      <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+        {icon}
+      </div>
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+    </Link>
   );
 }
