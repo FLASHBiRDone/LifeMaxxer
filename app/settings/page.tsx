@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ChefHat, ChevronRight, Flame, ShoppingBasket, Sunrise } from 'lucide-react';
+import { ChefHat, ChevronRight, Flame, ShoppingBasket, Sunrise, Trophy } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { PushToggle } from '@/components/settings/push-toggle';
 import { NotificationPreferences } from '@/components/settings/notification-prefs';
@@ -59,6 +59,7 @@ export default async function SettingsPage({
         </h2>
         <div className="rounded-2xl border bg-card overflow-hidden divide-y divide-border/50 soft-shadow">
           <ShortcutLink href="/gm" icon={<Sunrise className="h-5 w-5" />} label="Morgen-ritual" />
+          <ShortcutLink href="/rewards" icon={<Trophy className="h-5 w-5" />} label="Belønninger" />
           <ShortcutLink href="/recipes" icon={<ChefHat className="h-5 w-5" />} label="Middager" />
           <ShortcutLink href="/shopping" icon={<ShoppingBasket className="h-5 w-5" />} label="Handleliste" />
           <ShortcutLink href="/habits" icon={<Flame className="h-5 w-5" />} label="Administrer vaner" />

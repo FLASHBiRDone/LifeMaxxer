@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { authorizedClient, createEvent } from '@/lib/google';
+import { getOrCreateHouseholdId } from '@/lib/household';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,7 @@ const bodySchema = z.object({
   startAt: z.string().min(1),
   endAt: z.string().optional(),
   isMain: z.boolean().optional(),
+  scope: z.enum(['personal', 'family']).optional(),
 });
 
 function toDateAndTime(iso: string): { date: string; time: string } {
@@ -42,6 +44,18 @@ export async function POST(request: NextRequest) {
 
   const title = parsed.data.content.trim().slice(0, 200);
   const { date, time } = toDateAndTime(parsed.data.startAt);
+
+  let householdId: string | null = null;
+  if (parsed.data.scope === 'family') {
+    try {
+      householdId = await getOrCreateHouseholdId(supabase, user.id);
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'household error' },
+        { status: 500 },
+      );
+    }
+  }
 
   const { data: tokens } = await supabase
     .from('google_tokens')
@@ -94,6 +108,8 @@ export async function POST(request: NextRequest) {
     scheduled_time: time,
     is_main: Boolean(parsed.data.isMain),
     calendar_event_id: calendarEventId,
+    household_id: householdId,
+    xp_value: parsed.data.isMain ? 10 : 5,
   });
   if (questErr) {
     return NextResponse.json({ error: questErr.message }, { status: 500 });

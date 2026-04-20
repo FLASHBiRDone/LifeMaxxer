@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Brain, Sparkles, Target, Flame, Trash2, Loader2, Send, Check, CalendarPlus, CalendarClock, X } from 'lucide-react';
+import { Brain, Sparkles, Target, Flame, Trash2, Loader2, Send, Check, CalendarPlus, CalendarClock, X, User, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,6 +61,7 @@ export function InboxClient({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleStart, setScheduleStart] = useState(defaultScheduleStart());
   const [scheduleDuration, setScheduleDuration] = useState(30);
+  const [scheduleScope, setScheduleScope] = useState<'personal' | 'family'>('personal');
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Record<string, Suggestion>>({});
   const [, startTransition] = useTransition();
@@ -81,6 +82,7 @@ export function InboxClient({
             content,
             startAt: new Date(scheduleStart).toISOString(),
             endAt: new Date(endLocal).toISOString(),
+            scope: scheduleScope,
           }),
         });
         if (!res.ok) {
@@ -91,6 +93,7 @@ export function InboxClient({
         setScheduleOpen(false);
         setScheduleStart(defaultScheduleStart());
         setScheduleDuration(30);
+        setScheduleScope('personal');
         router.refresh();
       } else {
         const res = await fetch('/api/inbox', {
@@ -229,6 +232,39 @@ export function InboxClient({
           <div className="rounded-2xl border bg-muted/40 p-3 space-y-3">
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium text-muted-foreground">
+                Hvem
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setScheduleScope('personal')}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-medium transition-colors',
+                    scheduleScope === 'personal'
+                      ? 'grad-primary text-primary-foreground border-transparent'
+                      : 'bg-background hover:border-primary/40',
+                  )}
+                >
+                  <User className="h-3.5 w-3.5" />
+                  Personlig
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleScope('family')}
+                  className={cn(
+                    'inline-flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-medium transition-colors',
+                    scheduleScope === 'family'
+                      ? 'grad-primary text-primary-foreground border-transparent'
+                      : 'bg-background hover:border-primary/40',
+                  )}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Familie
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground">
                 Tidspunkt
               </label>
               <Input
@@ -261,9 +297,11 @@ export function InboxClient({
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {googleConnected
-                ? 'Legges i Google Kalender og som dagens oppdrag.'
-                : 'Legges som oppdrag. Koble Google Kalender i Innstillinger for kalenderhendelse.'}
+              {scheduleScope === 'family'
+                ? 'Synlig for alle i husholdet – første som krysser av får XP.'
+                : googleConnected
+                  ? 'Legges i Google Kalender og som dagens oppdrag.'
+                  : 'Legges som oppdrag. Koble Google Kalender i Innstillinger for kalenderhendelse.'}
             </p>
           </div>
         )}

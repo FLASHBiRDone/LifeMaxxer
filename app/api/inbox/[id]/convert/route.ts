@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { osloDayBounds } from '@/lib/time';
+import { getOrCreateHouseholdId } from '@/lib/household';
 
 type ConvertBody = {
   type: 'quest' | 'habit' | 'discarded';
   title?: string;
   frequency?: 'daily' | 'weekly';
+  scope?: 'personal' | 'family';
 };
 
 export async function POST(
@@ -35,10 +37,22 @@ export async function POST(
 
   if (body.type === 'quest') {
     const { dateString } = osloDayBounds();
+    let householdId: string | null = null;
+    if (body.scope === 'family') {
+      try {
+        householdId = await getOrCreateHouseholdId(supabase, user.id);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'household error' },
+          { status: 500 },
+        );
+      }
+    }
     const { error } = await supabase.from('quests').insert({
       user_id: user.id,
       title,
       scheduled_for: dateString,
+      household_id: householdId,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else if (body.type === 'habit') {
