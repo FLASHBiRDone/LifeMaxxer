@@ -31,9 +31,12 @@ create table if not exists public.task_categories (
   emoji text check (emoji is null or length(emoji) between 1 and 8),
   is_system boolean not null default false,
   sort_order int not null default 0,
-  created_at timestamptz not null default now(),
-  unique (household_id, lower(label))
+  created_at timestamptz not null default now()
 );
+-- Case-insensitive uniqueness per household. Postgres only accepts
+-- expressions in unique indexes, not inline unique constraints.
+create unique index if not exists task_categories_household_label_idx
+  on public.task_categories (household_id, lower(label));
 create index if not exists task_categories_household_idx on public.task_categories (household_id, sort_order);
 alter table public.task_categories enable row level security;
 alter table public.task_categories force row level security;
