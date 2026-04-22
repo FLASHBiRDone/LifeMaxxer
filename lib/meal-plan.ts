@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { getClaude, MODELS, estimateCostUsd } from '@/lib/claude';
 import { MEAL_PLAN_V1 } from '@/lib/prompts';
-import type { MealPlanParams, MealPlanOutput } from '@/lib/prompts';
+import type { MealPlanParams, MealPlanOutput, MealPlanDay } from '@/lib/prompts';
 
 const dayDetailSchema = z.object({
   day: z.string().min(1).max(40),
@@ -16,11 +16,19 @@ const dayDetailSchema = z.object({
 });
 
 const planSchema = z.object({
-  days: z.array(dayDetailSchema).length(7),
+  days: z.array(dayDetailSchema).min(1).max(7),
 });
 
 export type MealPlanResult = {
   output: MealPlanOutput;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  promptVersion: string;
+};
+
+export type MealDayResult = {
+  day: MealPlanDay;
   tokensIn: number;
   tokensOut: number;
   costUsd: number;
@@ -50,6 +58,45 @@ export async function generateMealPlan(params: MealPlanParams): Promise<MealPlan
   const tokensOut = res.usage.output_tokens;
   return {
     output,
+    tokensIn,
+    tokensOut,
+    costUsd: estimateCostUsd(MODELS.morningBriefing, tokensIn, tokensOut),
+    promptVersion: MEAL_PLAN_V1.version,
+  };
+}
+
+export async function swapMealPlanDay(
+  params: MealPlanParams,
+  targetDayName: string,
+  otherDays: { day: string; title: string; description?: string }[],
+): Promise<MealDayResult> {
+  const client = getClaude();
+  const res = await client.messages.create({
+    model: MODELS.morningBriefing,
+    max_tokens: 1500,
+    system: MEAL_PLAN_V1.system,
+    messages: [
+      {
+        role: 'user',
+        content: MEAL_PLAN_V1.buildSwapUser(params, targetDayName, otherDays),
+      },
+    ],
+  });
+
+  const text = res.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n')
+    .trim();
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('meal day swap response did not contain JSON');
+  const day = dayDetailSchema.parse(JSON.parse(jsonMatch[0]));
+
+  const tokensIn = res.usage.input_tokens;
+  const tokensOut = res.usage.output_tokens;
+  return {
+    day,
     tokensIn,
     tokensOut,
     costUsd: estimateCostUsd(MODELS.morningBriefing, tokensIn, tokensOut),

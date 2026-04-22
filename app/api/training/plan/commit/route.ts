@@ -60,6 +60,19 @@ export async function POST(request: NextRequest) {
   const time = ((prefs as any)?.training_time as string) ?? '17:00';
   const calendar = await addTrainingPlanToCalendar(supabase, user.id, plan, time);
 
+  if (calendar.status === 'added') {
+    await supabase
+      .from('ai_messages')
+      .update({
+        metadata: {
+          calendarId: calendar.calendarId,
+          byDay: calendar.byDay,
+          trainingTime: time,
+        },
+      })
+      .eq('id', planRow.id);
+  }
+
   return NextResponse.json({
     committed: true,
     habitId,

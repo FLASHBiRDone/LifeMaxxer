@@ -169,4 +169,65 @@ Extra notes: ${p.notes?.trim() || '(none)'}
 
 Design a weekly training program. It must fit exactly within minutesPerSession per workout day and use ONLY the listed equipment. Include appropriate rest days. Generate the JSON now.`;
   },
+  /**
+   * Prompt for regenerating ONE day of an existing training plan,
+   * keeping the rest of the week intact and avoiding repeating the
+   * same focus / movement pattern as adjacent days.
+   */
+  buildSwapUser: (
+    p: TrainingPlanParams,
+    targetDayName: string,
+    otherDays: { day: string; title: string; type: string; focus: string }[],
+  ) => {
+    const goalList = p.goals.map((g) => `- ${GOAL_LABELS[g]}`).join('\n');
+    const equipList = p.equipment.length
+      ? p.equipment.map((e) => `- ${EQUIPMENT_LABELS[e]}`).join('\n')
+      : '- (none — bodyweight only)';
+    const others = otherDays
+      .map(
+        (d) =>
+          `- ${d.day}: ${d.title} [${d.type}] — ${d.focus}`,
+      )
+      .join('\n');
+    return `You are regenerating ONE day of an existing training plan.
+Locale: ${p.locale}
+Experience: ${p.experience}
+Goals (ranked):
+${goalList}
+Training location: ${p.location}
+Minutes per session: ${p.minutesPerSession}
+Available equipment:
+${equipList}
+Injuries / limitations: ${p.injuries?.trim() || '(none)'}
+Extra notes: ${p.notes?.trim() || '(none)'}
+
+Target day: ${targetDayName}
+Other days already in the plan (avoid clashing with the day BEFORE
+and AFTER your target: no back-to-back identical movement patterns,
+no repeating focuses):
+${others || '(none)'}
+
+Generate exactly ONE new day. Same safety + rest-interval rules as
+the full-plan prompt. Output strict JSON for a single day object
+(NOT wrapped in days[]). Schema:
+
+{
+  "day": "${targetDayName}",
+  "type": "strength" | "cardio" | "conditioning" | "mobility" | "rest",
+  "title": "short session name",
+  "duration": total minutes,
+  "focus": "one-line summary",
+  "warmup": [...],
+  "exercises": [
+    {
+      "name": "string",
+      "sets": N,
+      "reps": "string",
+      "restSeconds": N,
+      "notes": "optional"
+    }
+  ],
+  "cooldown": [...]
+}`;
+  },
 } as const;

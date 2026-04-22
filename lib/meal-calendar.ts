@@ -17,7 +17,13 @@ type MealPlanRecord = {
 
 export type MealCalendarResult =
   | { status: 'skipped'; reason: 'no_tokens' | 'no_days' | 'disabled' }
-  | { status: 'added'; created: number; googleEventIds: string[] }
+  | {
+      status: 'added';
+      created: number;
+      googleEventIds: string[];
+      byDay: Record<number, string>;
+      calendarId: string;
+    }
   | { status: 'error'; message: string };
 
 function buildDescription(day: MealPlanDay): string {
@@ -55,6 +61,7 @@ export async function addMealPlanToCalendar(
   try {
     const dates = mealPlanWeek();
     const eventIds: string[] = [];
+    const byDay: Record<number, string> = {};
 
     for (let i = 0; i < 7 && i < plan.days.length; i++) {
       const date = dates[i];
@@ -74,12 +81,19 @@ export async function addMealPlanToCalendar(
           ctx.calendarId,
         );
         eventIds.push(id);
+        byDay[i] = id;
       } catch (err) {
         console.error('[meal-calendar] createEvent failed', date, err);
       }
     }
 
-    return { status: 'added', created: eventIds.length, googleEventIds: eventIds };
+    return {
+      status: 'added',
+      created: eventIds.length,
+      googleEventIds: eventIds,
+      byDay,
+      calendarId: ctx.calendarId,
+    };
   } catch (err) {
     return {
       status: 'error',

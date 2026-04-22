@@ -10,6 +10,7 @@ export const maxDuration = 60;
 
 const requestSchema = z.object({
   people: z.number().int().min(1).max(12),
+  days: z.number().int().min(1).max(7).default(7),
   allergens: z.array(z.enum(ALLERGENS)).default([]),
   diet: z.enum(['any', 'vegetarian', 'vegan', 'pescatarian']).default('any'),
   notes: z.string().max(500).default(''),
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
     const result = await generateMealPlan({
       locale,
       people: parsed.data.people,
+      days: parsed.data.days,
       allergens: parsed.data.allergens,
       diet: parsed.data.diet,
       notes: parsed.data.notes,
@@ -47,20 +49,46 @@ export async function POST(request: NextRequest) {
       days: result.output.days,
     };
 
-    await supabase.from('ai_messages').insert({
-      user_id: user.id,
-      role: 'assistant',
-      content: JSON.stringify(record),
-      context_type: 'meal_plan',
-      prompt_version: result.promptVersion,
-      tokens_in: result.tokensIn,
-      tokens_out: result.tokensOut,
-      cost_usd: result.costUsd,
-    });
+    const { data: msg, error: insertError } = await supabase
+      .from('ai_messages')
+      .insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: JSON.stringify(record),
+        context_type: 'meal_plan',
+        prompt_version: result.promptVersion,
+        tokens_in: result.tokensIn,
+        tokens_out: result.tokensOut,
+        cost_usd: result.costUsd,
+      })
+      .select('id, created_at')
+      .single();
+    if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
 
+    const messageId = (msg as any).id as string;
     const calendar = await addMealPlanToCalendar(supabase, user.id, record);
 
-    return NextResponse.json({ plan: record, calendar });
+    // Persist calendar mapping so later day-swaps can patch/delete events
+    if (calendar.status === 'added') {
+      await supabase
+        .from('ai_messages')
+        .update({
+          metadata: {
+            calendarId: calendar.calendarId,
+            byDay: calendar.byDay,
+          },
+        })
+        .eq('id', messageId);
+    }
+
+    return NextResponse.json({
+      plan: record,
+      messageId,
+      createdAt: (msg as any).created_at,
+      calendar,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

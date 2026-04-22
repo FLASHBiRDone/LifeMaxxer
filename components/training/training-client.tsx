@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Settings2,
   ShieldAlert,
+  Shuffle,
   Sparkles,
   TrendingUp,
   Zap,
@@ -86,6 +87,7 @@ export function TrainingClient({
   const [error, setError] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [togglingKey, setTogglingKey] = useState<ExerciseKey | null>(null);
+  const [swappingDay, setSwappingDay] = useState<number | null>(null);
   const [calendarStatus, setCalendarStatus] = useState<
     | { kind: 'added'; count: number }
     | { kind: 'no_tokens' }
@@ -233,6 +235,43 @@ export function TrainingClient({
       }
     } finally {
       setTogglingKey(null);
+    }
+  }
+
+  async function swapDay(dayIndex: number) {
+    if (!planId || swappingDay !== null) return;
+    setSwappingDay(dayIndex);
+    setError(null);
+    try {
+      const res = await fetch('/api/training/plan/day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planMessageId: planId, dayIndex }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke bytte dag');
+      }
+      const { day: newDay } = await res.json();
+      setPlan((p) => {
+        if (!p) return p;
+        const nextDays = [...p.days];
+        nextDays[dayIndex] = newDay;
+        return { ...p, days: nextDays };
+      });
+      // Clear any ticked exercises for that day (exercise indices may shift)
+      setCompletedMap((prev) => {
+        const next = new Set(prev);
+        for (const k of prev) {
+          if (k.startsWith(`${dayIndex}-`)) next.delete(k);
+        }
+        return next;
+      });
+      setOpenDay(dayIndex);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setSwappingDay(null);
     }
   }
 
@@ -480,6 +519,28 @@ export function TrainingClient({
                             ))}
                           </ul>
                         </ExpandSection>
+                      )}
+
+                      {planId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => swapDay(idx)}
+                          disabled={swappingDay !== null}
+                          className="w-full"
+                        >
+                          {swappingDay === idx ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                              Bytter…
+                            </>
+                          ) : (
+                            <>
+                              <Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt økt
+                            </>
+                          )}
+                        </Button>
                       )}
                     </div>
                   )}

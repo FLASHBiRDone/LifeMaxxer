@@ -3,6 +3,7 @@ import { MODELS } from '@/lib/claude';
 export type MealPlanParams = {
   locale: 'nb' | 'en';
   people: number;
+  days: number; // 1..7
   allergens: string[]; // from ALLERGENS
   diet: 'any' | 'vegetarian' | 'vegan' | 'pescatarian';
   notes: string;
@@ -40,10 +41,18 @@ const ALLERGEN_LABELS: Record<string, string> = {
   mollusc: 'molluscs (mussels, oysters, squid)',
 };
 
+const DAYS_NB = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
+const DAYS_EN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function dayNames(count: number, locale: 'nb' | 'en'): string[] {
+  const src = locale === 'nb' ? DAYS_NB : DAYS_EN;
+  return src.slice(0, Math.max(1, Math.min(7, count)));
+}
+
 export const MEAL_PLAN_V1 = {
   version: 'meal-plan.v1',
   model: MODELS.morningBriefing,
-  system: `You are LifeMaxxer's meal planner. You generate a one-week dinner plan (7 days) for a household.
+  system: `You are LifeMaxxer's meal planner. You generate a dinner plan for a household spanning a user-specified number of days (1–7).
 
 ABSOLUTE SAFETY RULES:
 - Never include an ingredient the user is allergic to. This includes sauces, marinades, garnishes, hidden ingredients, and cross-contamination categories. Better to be boring than to harm.
@@ -53,8 +62,8 @@ ABSOLUTE SAFETY RULES:
 - If diet is "pescatarian": no meat, but fish and seafood are OK unless flagged as allergens.
 
 CONTENT RULES:
-- Exactly 7 days, named in user's locale (Mandag..Søndag for nb, Monday..Sunday for en).
-- Variety: no repeated dishes, mix protein sources and cuisines across the week.
+- Generate exactly the number of days requested (1–7), in the order of day names provided.
+- Variety: no repeated dishes, mix protein sources and cuisines across the plan.
 - Scale ingredient amounts to the given people count.
 - Use common Nordic grocery items when locale is nb.
 - Keep prep + cook time realistic (most weeknights under 45 min total).
@@ -80,13 +89,60 @@ OUTPUT FORMAT (strict JSON, no preamble, no trailing text):
       p.allergens.length === 0
         ? '(none)'
         : p.allergens.map((a) => `- ${ALLERGEN_LABELS[a] ?? a}`).join('\n');
+    const names = dayNames(p.days, p.locale);
     return `Locale: ${p.locale}
+People: ${p.people}
+Diet: ${p.diet}
+Number of days: ${names.length}
+Day names (use exactly these, in this order):
+${names.map((n) => `- ${n}`).join('\n')}
+Allergens to AVOID (strict):
+${allergenList}
+User notes: ${p.notes.trim() || '(none)'}
+
+Generate the ${names.length}-day dinner plan now.`;
+  },
+  /**
+   * Prompt for regenerating ONE day of an existing plan, avoiding the
+   * other days' dishes / core proteins / cuisines.
+   */
+  buildSwapUser: (
+    p: MealPlanParams,
+    targetDayName: string,
+    otherDays: { day: string; title: string; description?: string }[],
+  ) => {
+    const allergenList =
+      p.allergens.length === 0
+        ? '(none)'
+        : p.allergens.map((a) => `- ${ALLERGEN_LABELS[a] ?? a}`).join('\n');
+    const others = otherDays
+      .map((d) => `- ${d.day}: ${d.title}${d.description ? ` — ${d.description}` : ''}`)
+      .join('\n');
+    return `You are regenerating ONE day of an existing dinner plan.
+Locale: ${p.locale}
 People: ${p.people}
 Diet: ${p.diet}
 Allergens to AVOID (strict):
 ${allergenList}
 User notes: ${p.notes.trim() || '(none)'}
 
-Generate the 7-day dinner plan now.`;
+Target day: ${targetDayName}
+Other days in the plan (do NOT repeat any of these dishes, their
+core protein, or their cuisine):
+${others || '(none)'}
+
+Generate exactly ONE new day. Must be significantly different from
+the others. Output strict JSON matching this single-day schema, no
+preamble, no trailing text, no wrapping array — a single object:
+
+{
+  "day": "${targetDayName}",
+  "title": "string",
+  "description": "one sentence, max 20 words",
+  "prepMinutes": 10,
+  "cookMinutes": 25,
+  "ingredients": [{ "name": "string", "amount": "string" }],
+  "instructions": ["step 1", "step 2", "step 3"]
+}`;
   },
 } as const;

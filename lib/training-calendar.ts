@@ -6,7 +6,13 @@ import type { TrainingPlanOutput, TrainingDay } from '@/lib/prompts';
 
 export type TrainingCalendarResult =
   | { status: 'skipped'; reason: 'no_tokens' | 'no_days' | 'all_rest' }
-  | { status: 'added'; created: number; googleEventIds: string[] }
+  | {
+      status: 'added';
+      created: number;
+      googleEventIds: string[];
+      byDay: Record<number, string>;
+      calendarId: string;
+    }
   | { status: 'error'; message: string };
 
 function addMinutes(date: Date, minutes: number): Date {
@@ -69,6 +75,7 @@ export async function addTrainingPlanToCalendar(
     const dates = mealPlanWeek();
     const { h, m } = parseHHMM(time);
     const eventIds: string[] = [];
+    const byDay: Record<number, string> = {};
 
     for (const { d: day, i } of activeDays) {
       const dateStr = dates[i];
@@ -87,12 +94,19 @@ export async function addTrainingPlanToCalendar(
           ctx.calendarId,
         );
         eventIds.push(id);
+        byDay[i] = id;
       } catch (err) {
         console.error('[training-calendar] createEvent failed', dateStr, err);
       }
     }
 
-    return { status: 'added', created: eventIds.length, googleEventIds: eventIds };
+    return {
+      status: 'added',
+      created: eventIds.length,
+      googleEventIds: eventIds,
+      byDay,
+      calendarId: ctx.calendarId,
+    };
   } catch (err) {
     return {
       status: 'error',

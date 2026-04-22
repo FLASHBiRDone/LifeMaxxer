@@ -224,6 +224,7 @@ export async function patchEvent(
   auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
   googleEventId: string,
   patch: EventPatch,
+  calendarId: string = 'primary',
 ): Promise<void> {
   const calendar = google.calendar({ version: 'v3', auth });
   const requestBody: calendar_v3.Schema$Event = {};
@@ -232,8 +233,26 @@ export async function patchEvent(
   if (patch.start) requestBody.start = { dateTime: patch.start.toISOString() };
   if (patch.end) requestBody.end = { dateTime: patch.end.toISOString() };
   await calendar.events.patch({
-    calendarId: 'primary',
+    calendarId,
     eventId: googleEventId,
     requestBody,
   });
+}
+
+export async function deleteEvent(
+  auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
+  googleEventId: string,
+  calendarId: string = 'primary',
+): Promise<void> {
+  const calendar = google.calendar({ version: 'v3', auth });
+  try {
+    await calendar.events.delete({
+      calendarId,
+      eventId: googleEventId,
+    });
+  } catch (err: unknown) {
+    // 410 Gone / 404 Not Found are fine — event may already be gone.
+    const code = (err as { code?: number })?.code;
+    if (code !== 404 && code !== 410) throw err;
+  }
 }

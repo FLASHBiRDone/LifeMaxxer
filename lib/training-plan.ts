@@ -41,6 +41,57 @@ export type TrainingPlanResult = {
   promptVersion: string;
 };
 
+export type TrainingDayResult = {
+  day: z.infer<typeof daySchema>;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  promptVersion: string;
+};
+
+export async function swapTrainingDay(
+  params: TrainingPlanParams,
+  targetDayName: string,
+  otherDays: { day: string; title: string; type: string; focus: string }[],
+): Promise<TrainingDayResult> {
+  const client = getClaude();
+  const res = await client.messages.create({
+    model: TRAINING_PLAN_V1.model,
+    max_tokens: 2000,
+    system: TRAINING_PLAN_V1.system,
+    messages: [
+      {
+        role: 'user',
+        content: TRAINING_PLAN_V1.buildSwapUser(params, targetDayName, otherDays),
+      },
+    ],
+  });
+
+  const text = res.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n')
+    .trim();
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('training day swap response did not contain JSON');
+  const day = daySchema.parse(JSON.parse(jsonMatch[0]));
+
+  const tokensIn = res.usage.input_tokens;
+  const tokensOut = res.usage.output_tokens;
+  return {
+    day,
+    tokensIn,
+    tokensOut,
+    costUsd: estimateCostUsd(
+      TRAINING_PLAN_V1.model as keyof typeof PRICING,
+      tokensIn,
+      tokensOut,
+    ),
+    promptVersion: TRAINING_PLAN_V1.version,
+  };
+}
+
 export async function generateTrainingPlan(
   params: TrainingPlanParams,
 ): Promise<TrainingPlanResult> {

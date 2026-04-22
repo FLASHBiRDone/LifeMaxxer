@@ -13,6 +13,8 @@ import {
   Check,
   CalendarPlus,
   CalendarCheck,
+  Shuffle,
+  CalendarRange,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +28,7 @@ import { LoadingMessage } from '@/components/ui/loading-message';
 type MealPlan = {
   params: {
     people: number;
+    days?: number;
     allergens: string[];
     diet: 'any' | 'vegetarian' | 'vegan' | 'pescatarian';
     notes: string;
@@ -41,6 +44,8 @@ type MealPlan = {
     instructions: string[];
   }>;
 };
+
+const DAY_COUNT_OPTIONS = [3, 5, 7] as const;
 
 const ALLERGEN_LABELS_NB: Record<Allergen, string> = {
   gluten: 'Gluten',
@@ -67,13 +72,25 @@ const DIETS: { value: MealPlan['params']['diet']; label: string }[] = [
   { value: 'pescatarian', label: 'Pescatar' },
 ];
 
-export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null }) {
+export function RecipesClient({
+  initialPlan,
+  initialPlanId,
+  initialPlanCreatedAt,
+}: {
+  initialPlan: MealPlan | null;
+  initialPlanId: string | null;
+  initialPlanCreatedAt: string | null;
+}) {
   const [plan, setPlan] = useState<MealPlan | null>(initialPlan);
+  const [planId, setPlanId] = useState<string | null>(initialPlanId);
+  const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(initialPlanCreatedAt);
   const [people, setPeople] = useState<number>(initialPlan?.params.people ?? 2);
+  const [dayCount, setDayCount] = useState<number>(initialPlan?.params.days ?? 7);
   const [diet, setDiet] = useState<MealPlan['params']['diet']>(initialPlan?.params.diet ?? 'any');
   const [allergens, setAllergens] = useState<string[]>(initialPlan?.params.allergens ?? []);
   const [notes, setNotes] = useState<string>(initialPlan?.params.notes ?? '');
   const [generating, setGenerating] = useState(false);
+  const [swappingDay, setSwappingDay] = useState<number | null>(null);
   const [shoppingOpen, setShoppingOpen] = useState(false);
   const [addedToShopping, setAddedToShopping] = useState<number | null>(null);
   const [addingToCalendar, setAddingToCalendar] = useState(false);
@@ -100,14 +117,22 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
       const res = await fetch('/api/recipes/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ people, allergens, diet, notes: notes.trim() }),
+        body: JSON.stringify({
+          people,
+          days: dayCount,
+          allergens,
+          diet,
+          notes: notes.trim(),
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? 'Kunne ikke lage planen');
       }
-      const { plan: p, calendar } = await res.json();
+      const { plan: p, messageId, createdAt, calendar } = await res.json();
       setPlan(p);
+      setPlanId(messageId ?? null);
+      setPlanCreatedAt(createdAt ?? null);
       setOpenDay(0);
       if (calendar?.status === 'added') {
         setCalendarStatus({ kind: 'added', count: calendar.created });
@@ -120,6 +145,35 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function swapDay(dayIndex: number) {
+    if (!planId || swappingDay !== null) return;
+    setSwappingDay(dayIndex);
+    setError(null);
+    try {
+      const res = await fetch('/api/recipes/plan/day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planMessageId: planId, dayIndex }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke bytte dag');
+      }
+      const { day } = await res.json();
+      setPlan((p) => {
+        if (!p) return p;
+        const nextDays = [...p.days];
+        nextDays[dayIndex] = day;
+        return { ...p, days: nextDays };
+      });
+      setOpenDay(dayIndex);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setSwappingDay(null);
     }
   }
 
@@ -157,7 +211,9 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
           </p>
           <h1 className="text-2xl font-bold">Ukens plan</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            {plan ? '7 middager klar' : 'AI lager en plan tilpasset deg'}
+            {plan
+              ? `${plan.days.length} middager klar`
+              : 'AI lager en plan tilpasset deg'}
           </p>
         </div>
       </header>
@@ -196,6 +252,29 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5 text-xs">
+            <CalendarRange className="h-3.5 w-3.5" /> Antall dager
+          </Label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {DAY_COUNT_OPTIONS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setDayCount(n)}
+                className={cn(
+                  'h-9 rounded-lg text-xs font-semibold border transition-colors',
+                  dayCount === n
+                    ? 'grad-primary text-primary-foreground border-transparent'
+                    : 'bg-background hover:border-primary/40',
+                )}
+              >
+                {n} dager
+              </button>
+            ))}
           </div>
         </div>
 
@@ -251,7 +330,9 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
           ) : plan ? (
             <><RefreshCw className="h-4 w-4 mr-2" /> Ny plan</>
           ) : (
-            <><Sparkles className="h-4 w-4 mr-2" /> Lag 7-dagers plan</>
+            <>
+              <Sparkles className="h-4 w-4 mr-2" /> Lag {dayCount}-dagers plan
+            </>
           )}
         </Button>
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -383,6 +464,23 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
                           ))}
                         </ol>
                       </div>
+
+                      {planId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => swapDay(idx)}
+                          disabled={swappingDay !== null}
+                          className="w-full"
+                        >
+                          {swappingDay === idx ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Bytter…</>
+                          ) : (
+                            <><Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt dag</>
+                          )}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </li>

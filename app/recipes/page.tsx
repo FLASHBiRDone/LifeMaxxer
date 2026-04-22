@@ -11,7 +11,7 @@ export default async function RecipesPage() {
 
   const { data: planRow } = await supabase
     .from('ai_messages')
-    .select('content, created_at')
+    .select('id, content, created_at')
     .eq('user_id', user.id)
     .eq('context_type', 'meal_plan')
     .order('created_at', { ascending: false })
@@ -27,7 +27,11 @@ export default async function RecipesPage() {
 
   return (
     <main className="container max-w-xl py-6">
-      <RecipesClient initialPlan={initialPlan} />
+      <RecipesClient
+        initialPlan={initialPlan}
+        initialPlanId={(planRow as any)?.id ?? null}
+        initialPlanCreatedAt={(planRow as any)?.created_at ?? null}
+      />
     </main>
   );
 }
