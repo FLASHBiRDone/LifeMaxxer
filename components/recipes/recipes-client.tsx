@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
 import { ALLERGENS, type Allergen } from '@/lib/allergens';
+import { ShoppingPreviewDialog } from './shopping-preview-dialog';
 
 type MealPlan = {
   params: {
@@ -72,8 +73,8 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
   const [allergens, setAllergens] = useState<string[]>(initialPlan?.params.allergens ?? []);
   const [notes, setNotes] = useState<string>(initialPlan?.params.notes ?? '');
   const [generating, setGenerating] = useState(false);
-  const [addingToShopping, setAddingToShopping] = useState(false);
-  const [addedToShopping, setAddedToShopping] = useState(false);
+  const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [addedToShopping, setAddedToShopping] = useState<number | null>(null);
   const [addingToCalendar, setAddingToCalendar] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState<
     | { kind: 'added'; count: number }
@@ -92,7 +93,7 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
     e.preventDefault();
     setGenerating(true);
     setError(null);
-    setAddedToShopping(false);
+    setAddedToShopping(null);
     setCalendarStatus(null);
     try {
       const res = await fetch('/api/recipes/plan', {
@@ -141,22 +142,7 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
     }
   }
 
-  async function addAllToShopping() {
-    if (!plan) return;
-    setAddingToShopping(true);
-    setAddedToShopping(false);
-    try {
-      const ingredients = plan.days.flatMap((d) => d.ingredients);
-      const res = await fetch('/api/recipes/plan/add-to-shopping', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ingredients }),
-      });
-      if (res.ok) setAddedToShopping(true);
-    } finally {
-      setAddingToShopping(false);
-    }
-  }
+  const allIngredients = plan ? plan.days.flatMap((d) => d.ingredients) : [];
 
   return (
     <div className="space-y-5">
@@ -273,13 +259,10 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
             <Button
               type="button"
               variant="outline"
-              onClick={addAllToShopping}
-              disabled={addingToShopping}
+              onClick={() => setShoppingOpen(true)}
             >
-              {addingToShopping ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Legger til…</>
-              ) : addedToShopping ? (
-                <><Check className="h-4 w-4 mr-2" /> Lagt til</>
+              {addedToShopping !== null ? (
+                <><Check className="h-4 w-4 mr-2" /> +{addedToShopping} varer</>
               ) : (
                 <><ShoppingBasket className="h-4 w-4 mr-2" /> Handleliste</>
               )}
@@ -299,6 +282,15 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
               )}
             </Button>
           </div>
+
+          <ShoppingPreviewDialog
+            open={shoppingOpen}
+            onClose={() => setShoppingOpen(false)}
+            ingredients={allIngredients}
+            people={plan.params.people}
+            onConfirmed={(n) => setAddedToShopping(n)}
+          />
+
 
           {calendarStatus?.kind === 'no_tokens' && (
             <p className="text-xs text-muted-foreground px-1">
