@@ -4,68 +4,132 @@
 
 @layer base {
   :root {
-    --background: 40 30% 98%;
-    --foreground: 230 25% 12%;
+    /* Warm off-white paper */
+    --background: 42 38% 98%;
+    --foreground: 220 22% 11%;
+
     --card: 0 0% 100%;
-    --card-foreground: 230 25% 12%;
-    --primary: 265 80% 62%;
+    --card-foreground: 220 22% 11%;
+
+    /* Primary: deep teal — calm but energetic */
+    --primary: 174 72% 38%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 230 20% 95%;
-    --secondary-foreground: 230 25% 20%;
-    --muted: 230 20% 96%;
-    --muted-foreground: 230 10% 45%;
-    --accent: 32 95% 60%;
-    --accent-foreground: 230 25% 12%;
-    --success: 155 70% 40%;
+
+    --secondary: 220 18% 95%;
+    --secondary-foreground: 220 22% 20%;
+
+    --muted: 220 18% 96%;
+    --muted-foreground: 220 8% 44%;
+
+    /* Accent: warm amber — fireside to the teal */
+    --accent: 32 95% 58%;
+    --accent-foreground: 220 22% 11%;
+
+    --success: 155 65% 38%;
     --success-foreground: 0 0% 100%;
-    --destructive: 355 75% 58%;
+
+    --destructive: 355 75% 56%;
     --destructive-foreground: 0 0% 100%;
-    --border: 230 15% 90%;
-    --input: 230 15% 90%;
-    --ring: 265 80% 62%;
+
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
+    --ring: 174 72% 38%;
+
     --radius: 1rem;
-    --grad-a: 265 80% 62%;
-    --grad-b: 300 75% 65%;
+
+    /* Hero gradient: teal → cyan for a "dawn sky" feel */
+    --grad-a: 174 72% 42%;
+    --grad-b: 198 92% 52%;
+
+    /* Accent gradient: amber → coral for warmth (used sparingly) */
+    --grad-warm-a: 32 95% 58%;
+    --grad-warm-b: 12 88% 62%;
+
+    /* Mesh-gradient spot colors */
+    --mesh-1: 174 72% 50%;
+    --mesh-2: 198 92% 60%;
+    --mesh-3: 32 95% 62%;
   }
 
   .dark {
-    --background: 240 15% 7%;
-    --foreground: 230 15% 94%;
-    --card: 240 15% 11%;
-    --card-foreground: 230 15% 94%;
-    --primary: 265 85% 70%;
-    --primary-foreground: 240 15% 7%;
-    --secondary: 240 12% 16%;
-    --secondary-foreground: 230 15% 94%;
-    --muted: 240 12% 14%;
-    --muted-foreground: 230 10% 65%;
-    --accent: 32 95% 65%;
-    --accent-foreground: 240 15% 7%;
-    --success: 155 65% 55%;
-    --success-foreground: 240 15% 7%;
+    /* Slate-ink, slightly blue to keep teal readable */
+    --background: 222 22% 7%;
+    --foreground: 210 18% 94%;
+
+    --card: 222 20% 11%;
+    --card-foreground: 210 18% 94%;
+
+    --primary: 174 62% 56%;
+    --primary-foreground: 222 22% 7%;
+
+    --secondary: 222 16% 16%;
+    --secondary-foreground: 210 18% 94%;
+
+    --muted: 222 16% 14%;
+    --muted-foreground: 215 10% 65%;
+
+    --accent: 38 92% 62%;
+    --accent-foreground: 222 22% 7%;
+
+    --success: 155 58% 56%;
+    --success-foreground: 222 22% 7%;
+
     --destructive: 355 75% 62%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 10% 20%;
-    --input: 240 10% 20%;
-    --ring: 265 85% 70%;
-    --grad-a: 265 85% 70%;
-    --grad-b: 300 80% 70%;
+
+    --border: 222 14% 20%;
+    --input: 222 14% 20%;
+    --ring: 174 62% 56%;
+
+    --grad-a: 174 62% 54%;
+    --grad-b: 198 82% 64%;
+    --grad-warm-a: 38 92% 62%;
+    --grad-warm-b: 12 82% 66%;
+
+    --mesh-1: 174 62% 48%;
+    --mesh-2: 198 78% 58%;
+    --mesh-3: 38 92% 62%;
   }
 
   * {
     border-color: hsl(var(--border));
   }
 
+  html {
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: 'rlig' 1, 'calt' 1, 'ss01' 1;
+    font-feature-settings: 'rlig' 1, 'calt' 1, 'ss01' 1, 'cv11' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    line-height: 1.55;
   }
 
+  /* Tighten heading tracking and refine scale */
   h1, h2, h3, h4 {
-    letter-spacing: -0.02em;
+    letter-spacing: -0.022em;
+    line-height: 1.15;
+  }
+  h1 { letter-spacing: -0.032em; }
+  h2 { letter-spacing: -0.028em; }
+
+  /* Numbers that align nicely in stats / XP tiles */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.22);
+    color: hsl(var(--foreground));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.6);
+    outline-offset: 2px;
+    border-radius: calc(var(--radius) - 6px);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -81,12 +145,23 @@
 }
 
 @layer utilities {
+  /* Soft tinted background wash (hero cards). */
   .grad-hero {
-    background: linear-gradient(135deg, hsl(var(--grad-a) / 0.15) 0%, hsl(var(--grad-b) / 0.08) 100%);
+    background:
+      linear-gradient(135deg, hsl(var(--grad-a) / 0.16) 0%, hsl(var(--grad-b) / 0.08) 100%);
   }
+
+  /* Solid brand gradient for pills, buttons, avatars. */
   .grad-primary {
     background: linear-gradient(135deg, hsl(var(--grad-a)) 0%, hsl(var(--grad-b)) 100%);
   }
+
+  /* Warm counterpart — use for streak / reward accents. */
+  .grad-warm {
+    background: linear-gradient(135deg, hsl(var(--grad-warm-a)) 0%, hsl(var(--grad-warm-b)) 100%);
+  }
+
+  /* Gradient text — for marketing-style headings. */
   .text-grad {
     background: linear-gradient(135deg, hsl(var(--grad-a)) 0%, hsl(var(--grad-b)) 100%);
     -webkit-background-clip: text;
@@ -94,19 +169,74 @@
     -webkit-text-fill-color: transparent;
     color: transparent;
   }
+
+  /* Multi-point mesh wash — heavier "wow" background for top heroes. */
+  .grad-mesh {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(at 18% 8%, hsl(var(--mesh-1) / 0.22) 0, transparent 45%),
+      radial-gradient(at 82% 0%, hsl(var(--mesh-2) / 0.18) 0, transparent 45%),
+      radial-gradient(at 65% 100%, hsl(var(--mesh-3) / 0.14) 0, transparent 55%);
+  }
+
+  /* Responsive hover lift + press. */
   .card-hover {
-    transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+    transition:
+      transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 180ms ease,
+      border-color 180ms ease;
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    border-color: hsl(var(--primary) / 0.3);
+    border-color: hsl(var(--primary) / 0.35);
+    box-shadow: 0 2px 4px hsl(var(--foreground) / 0.04), 0 10px 28px hsl(var(--foreground) / 0.06);
   }
+  .card-hover:active {
+    transform: translateY(0);
+  }
+
+  /* Low-key shadow for surfaces. */
   .soft-shadow {
-    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.04), 0 4px 16px hsl(var(--foreground) / 0.04);
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.04),
+      0 4px 16px hsl(var(--foreground) / 0.05);
   }
   .dark .soft-shadow {
-    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 4px 16px hsl(0 0% 0% / 0.2);
+    box-shadow:
+      0 1px 2px hsl(0 0% 0% / 0.35),
+      0 6px 22px hsl(0 0% 0% / 0.28);
   }
+
+  /* Elevated — for modals / dialog / top-of-fold heroes. */
+  .lift-shadow {
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.06),
+      0 18px 48px -12px hsl(var(--foreground) / 0.18);
+  }
+  .dark .lift-shadow {
+    box-shadow:
+      0 1px 2px hsl(0 0% 0% / 0.4),
+      0 24px 60px -12px hsl(0 0% 0% / 0.5);
+  }
+
+  /* Glowing primary ring — reward affordances. */
+  .ring-glow {
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.18);
+  }
+
+  /* Glassy surface — for floating nav / sticky bars. */
+  .glass {
+    background: hsl(var(--card) / 0.78);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-color: hsl(var(--border) / 0.7);
+  }
+
+  /* Soft hairline dividers that sit between muted and border. */
+  .hairline {
+    border-color: hsl(var(--foreground) / 0.08);
+  }
+
   @keyframes pop {
     0% { transform: scale(1); }
     50% { transform: scale(1.15); }
@@ -115,6 +245,32 @@
   .animate-pop {
     animation: pop 200ms ease-out;
   }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up {
+    animation: fade-up 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .skeleton {
+    background:
+      linear-gradient(
+        90deg,
+        hsl(var(--muted)) 0%,
+        hsl(var(--muted-foreground) / 0.12) 50%,
+        hsl(var(--muted)) 100%
+      );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+    border-radius: calc(var(--radius) - 6px);
+  }
+
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
