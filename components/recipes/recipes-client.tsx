@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
 import { ALLERGENS, type Allergen } from '@/lib/allergens';
 import { ShoppingPreviewDialog } from './shopping-preview-dialog';
+import { LoadingMessage } from '@/components/ui/loading-message';
 
 type MealPlan = {
   params: {
@@ -243,7 +244,10 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
           className="w-full grad-primary text-primary-foreground border-transparent"
         >
           {generating ? (
-            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lager plan…</>
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <LoadingMessage context="meal_plan" />
+            </>
           ) : plan ? (
             <><RefreshCw className="h-4 w-4 mr-2" /> Ny plan</>
           ) : (

@@ -21,6 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { LoadingMessage } from '@/components/ui/loading-message';
 import { cn } from '@/lib/cn';
 import type {
   TrainingDay,
@@ -338,7 +339,7 @@ export function TrainingClient({
               className="flex-1"
             >
               {generating ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lager…</>
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /><LoadingMessage context="training_plan" /></>
               ) : (
                 <><RefreshCw className="h-4 w-4 mr-2" /> Ny plan</>
               )}
@@ -540,7 +541,7 @@ export function TrainingClient({
             className="grad-primary text-primary-foreground border-transparent"
           >
             {generating ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lager…</>
+              <><Loader2 className="h-4 w-4 animate-spin mr-2" /><LoadingMessage context="training_plan" /></>
             ) : (
               <><Sparkles className="h-4 w-4 mr-2" /> Lag plan</>
             )}

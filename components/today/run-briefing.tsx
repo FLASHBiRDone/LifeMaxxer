@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { LoadingMessage } from '@/components/ui/loading-message';
 
 type Status =
   | { kind: 'idle' }
@@ -58,7 +59,8 @@ export function RunBriefingButton({ hasBriefing }: { hasBriefing: boolean }) {
       >
         {pending ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" /> Henter brief…
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <LoadingMessage context="briefing" />
           </>
         ) : hasBriefing ? (
           <>
