@@ -2,13 +2,14 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Sunrise, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { osloDayBounds, osloWeekDays } from '@/lib/time';
+import { osloDayBounds, osloWeekDays, todayPlanIndex } from '@/lib/time';
 import { TodayQuests } from '@/components/today/quests';
 import { EnergyCheckIn } from '@/components/today/energy';
 import { RunBriefingButton } from '@/components/today/run-briefing';
 import { WeekHabitGrid } from '@/components/today/week-habit-grid';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
+import { TodayPlansPreview } from '@/components/today/plans-preview';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,9 @@ export default async function TodayPage() {
     { data: habits },
     { data: habitLogs },
     { data: weekHabitLogs },
+    { data: mealPlanRow },
+    { data: trainingPlanRow },
+    { data: trainingPrefs },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -86,6 +90,27 @@ export default async function TodayPage() {
       .eq('user_id', user.id)
       .gte('logged_for', weekDays[0].dateString)
       .lte('logged_for', weekDays[6].dateString),
+    supabase
+      .from('ai_messages')
+      .select('id, content, created_at')
+      .eq('user_id', user.id)
+      .eq('context_type', 'meal_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('ai_messages')
+      .select('id, content, created_at')
+      .eq('user_id', user.id)
+      .eq('context_type', 'training_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('training_preferences')
+      .select('active_plan_id')
+      .eq('user_id', user.id)
+      .maybeSingle(),
   ]);
 
   let briefing: BriefingOutput | null = null;
@@ -166,6 +191,42 @@ export default async function TodayPage() {
   const hour = new Date().getHours();
   const showMorningRitual = !mana && hour < 12;
 
+  // Today's dinner + workout pulled from the latest stored plans.
+  let todayDinner: any = null;
+  let dinnerPeople: number | null = null;
+  if ((mealPlanRow as any)?.content) {
+    try {
+      const meal = JSON.parse((mealPlanRow as any).content);
+      const idx = todayPlanIndex(
+        (mealPlanRow as any).created_at,
+        meal.days?.length ?? 0,
+      );
+      if (idx !== null) {
+        todayDinner = meal.days[idx];
+        dinnerPeople = meal.params?.people ?? null;
+      }
+    } catch { /* ignore */ }
+  }
+
+  let todayWorkout: any = null;
+  const activePlanId = (trainingPrefs as any)?.active_plan_id as string | null;
+  if (
+    (trainingPlanRow as any)?.content &&
+    activePlanId &&
+    (trainingPlanRow as any).id === activePlanId
+  ) {
+    try {
+      const training = JSON.parse((trainingPlanRow as any).content);
+      const idx = todayPlanIndex(
+        (trainingPlanRow as any).created_at,
+        training.days?.length ?? 0,
+      );
+      if (idx !== null) {
+        todayWorkout = training.days[idx];
+      }
+    } catch { /* ignore */ }
+  }
+
   return (
     <main className="container max-w-xl py-6 space-y-5">
       {showMorningRitual && (
@@ -198,6 +259,12 @@ export default async function TodayPage() {
       />
 
       <TodayShortcuts />
+
+      <TodayPlansPreview
+        dinner={todayDinner}
+        workout={todayWorkout}
+        people={dinnerPeople}
+      />
 
       <TodayQuests quests={questsList} />
 

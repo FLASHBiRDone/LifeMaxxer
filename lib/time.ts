@@ -68,3 +68,21 @@ export function mealPlanWeek(reference: Date = new Date(), tz = OSLO) {
     return format(shifted, 'yyyy-MM-dd');
   });
 }
+
+/**
+ * Given the date a plan was generated, return today's index within the
+ * 7-day window the plan was scheduled over. Returns null if today falls
+ * outside the plan window (plan not started yet, or window has passed).
+ */
+export function todayPlanIndex(
+  planCreatedAt: Date | string,
+  planLength: number,
+  tz = OSLO,
+): number | null {
+  const ref = typeof planCreatedAt === 'string' ? new Date(planCreatedAt) : planCreatedAt;
+  const window = mealPlanWeek(ref, tz);
+  const { dateString } = osloDayBounds(new Date(), tz);
+  const idx = window.indexOf(dateString);
+  if (idx < 0 || idx >= planLength) return null;
+  return idx;
+}
