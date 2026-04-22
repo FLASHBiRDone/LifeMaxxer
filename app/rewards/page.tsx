@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getXpBalance } from '@/lib/xp';
 import { getTokenBalance } from '@/lib/tokens';
+import { getOrCreateHouseholdId } from '@/lib/household';
+import { seedSampleRewards } from '@/lib/seed-samples';
 import { RewardsClient } from '@/components/rewards/rewards-client';
 
 export const dynamic = 'force-dynamic';
@@ -10,6 +12,15 @@ export default async function RewardsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  // Ensure a household exists and seed starter rewards for fresh users.
+  let primaryHouseholdId: string | null = null;
+  try {
+    primaryHouseholdId = await getOrCreateHouseholdId(supabase, user.id);
+    await seedSampleRewards(supabase, user.id, primaryHouseholdId);
+  } catch (err) {
+    console.error('[rewards] seed skipped', err);
+  }
 
   const [{ data: memberships }, xp, tokens] = await Promise.all([
     supabase.from('household_members').select('household_id').eq('user_id', user.id),

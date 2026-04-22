@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getXpBalance } from '@/lib/xp';
 import { getTokenBalance } from '@/lib/tokens';
 import { getOrCreateHouseholdId } from '@/lib/household';
+import { seedSampleRewards, seedSampleTasks } from '@/lib/seed-samples';
 import { MarkedClient } from '@/components/marked/marked-client';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,9 @@ export default async function MarkedPage() {
     /* ignore */
   }
 
-  // Seed default task categories for this household on first visit
+  // Seed default task categories for this household on first visit,
+  // plus sample rewards + sample chores so a fresh household sees a
+  // populated catalog + marketplace instead of an empty state.
   if (householdId) {
     const { data: existing } = await supabase
       .from('task_categories')
@@ -29,6 +32,12 @@ export default async function MarkedPage() {
       .maybeSingle();
     if (!existing) {
       await supabase.rpc('seed_default_task_categories', { hid: householdId });
+    }
+    try {
+      await seedSampleRewards(supabase, user.id, householdId);
+      await seedSampleTasks(supabase, user.id, householdId);
+    } catch (err) {
+      console.error('[marked] seed skipped', err);
     }
   }
 
