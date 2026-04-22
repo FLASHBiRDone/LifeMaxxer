@@ -2,11 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Sunrise, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { osloDayBounds, osloWeekDays, todayPlanIndex } from '@/lib/time';
+import { osloDayBounds, todayPlanIndex } from '@/lib/time';
 import { TodayQuests } from '@/components/today/quests';
 import { EnergyCheckIn } from '@/components/today/energy';
 import { RunBriefingButton } from '@/components/today/run-briefing';
-import { WeekHabitGrid } from '@/components/today/week-habit-grid';
+import { TodayHabits } from '@/components/today/habits';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
 import { TodayPlansPreview } from '@/components/today/plans-preview';
@@ -26,9 +26,6 @@ export default async function TodayPage() {
   if (!user) redirect('/login');
 
   const { dateString } = osloDayBounds();
-  const weekDays = osloWeekDays();
-  const weekStart = weekDays[0].start.toISOString();
-  const weekEnd = weekDays[6].end.toISOString();
 
   const { data: membership } = await supabase
     .from('household_members')
@@ -54,7 +51,6 @@ export default async function TodayPage() {
     { data: mana },
     { data: habits },
     { data: habitLogs },
-    { data: weekHabitLogs },
     { data: mealPlanRow },
     { data: trainingPlanRow },
     { data: trainingPrefs },
@@ -85,12 +81,6 @@ export default async function TodayPage() {
       .eq('user_id', user.id)
       .eq('logged_for', dateString),
     supabase
-      .from('habit_logs')
-      .select('habit_id, logged_for')
-      .eq('user_id', user.id)
-      .gte('logged_for', weekDays[0].dateString)
-      .lte('logged_for', weekDays[6].dateString),
-    supabase
       .from('ai_messages')
       .select('id, content, created_at')
       .eq('user_id', user.id)
@@ -120,14 +110,6 @@ export default async function TodayPage() {
 
   const habitsList = (habits as any[]) ?? [];
   const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
-
-  // Build weekLogs: habit_id → dateString[]
-  const weekLogs: Record<string, string[]> = {};
-  for (const log of (weekHabitLogs as any[]) ?? []) {
-    if (!weekLogs[log.habit_id]) weekLogs[log.habit_id] = [];
-    weekLogs[log.habit_id].push(log.logged_for);
-  }
-
   const habitsDone = habitsList.filter((h: any) => loggedSet.has(h.id)).length;
   const rawQuests = (quests as any[]) ?? [];
 
@@ -178,15 +160,6 @@ export default async function TodayPage() {
     };
   });
   const questsDone = questsList.filter((q) => q.completed_at).length;
-
-  // Count unique habit×day pairs logged this week (past + today only)
-  const todayIdx = weekDays.findIndex((d) => d.dateString === dateString);
-  const daysElapsed = todayIdx + 1;
-  const weekHabitsTotal = habitsList.length * daysElapsed;
-  const weekHabitsDone = Object.values(weekLogs).reduce(
-    (sum, dates) => sum + dates.filter((d) => d <= dateString).length,
-    0,
-  );
 
   const hour = new Date().getHours();
   const showMorningRitual = !mana && hour < 12;
@@ -252,10 +225,6 @@ export default async function TodayPage() {
         questsDone={questsDone}
         questsTotal={questsList.length}
         energyLevel={(mana as any)?.level as Level | null ?? null}
-        weekDays={weekDays}
-        todayString={dateString}
-        weekHabitsDone={weekHabitsDone}
-        weekHabitsTotal={weekHabitsTotal}
       />
 
       <TodayShortcuts />
@@ -268,11 +237,9 @@ export default async function TodayPage() {
 
       <TodayQuests quests={questsList} />
 
-      <WeekHabitGrid
+      <TodayHabits
         habits={habitsList}
-        weekDays={weekDays}
-        todayString={dateString}
-        weekLogs={weekLogs}
+        loggedToday={[...loggedSet] as string[]}
       />
 
       <EnergyCheckIn initialLevel={(mana as any)?.level as Level | null ?? null} />
