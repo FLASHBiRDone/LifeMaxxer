@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { addTrainingPlanToCalendar } from '@/lib/training-calendar';
+import { clearPlanEvents, deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ensureTrainingHabit } from '@/lib/training-habit';
 
 export const runtime = 'nodejs';
@@ -50,6 +51,16 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id);
 
   const habitId = await ensureTrainingHabit(supabase, user.id);
+
+  // Before creating fresh calendar events, delete any stale events:
+  //  - clearPlanEvents wipes this plan's OWN existing events (re-commit)
+  //  - deletePlanEvents wipes events from any previous training plan rows
+  try {
+    await clearPlanEvents(supabase, user.id, planRow.id);
+    await deletePlanEvents(supabase, user.id, 'training_plan', planRow.id);
+  } catch (err) {
+    console.error('[training-commit] calendar cleanup failed', err);
+  }
 
   // Create calendar events on the LifeMaxxing calendar.
   const { data: prefs } = await supabase

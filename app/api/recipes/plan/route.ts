@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { generateMealPlan } from '@/lib/meal-plan';
 import { addMealPlanToCalendar } from '@/lib/meal-calendar';
+import { deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ALLERGENS } from '@/lib/allergens';
 
 export const runtime = 'nodejs';
@@ -68,6 +69,15 @@ export async function POST(request: NextRequest) {
     }
 
     const messageId = (msg as any).id as string;
+
+    // Wipe events from previous meal plans so we don't pile duplicates
+    // onto the same day(s) on the LifeMaxxing calendar.
+    try {
+      await deletePlanEvents(supabase, user.id, 'meal_plan', messageId);
+    } catch (err) {
+      console.error('[meal-plan] cleanup of previous events failed', err);
+    }
+
     const calendar = await addMealPlanToCalendar(supabase, user.id, record);
 
     // Persist calendar mapping so later day-swaps can patch/delete events
