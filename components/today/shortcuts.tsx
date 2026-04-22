@@ -1,16 +1,18 @@
 import Link from 'next/link';
-import { ChefHat, Dumbbell, Inbox, ShoppingBasket } from 'lucide-react';
+import { ChefHat, Dumbbell, Inbox, ShoppingBasket, Store, Trophy } from 'lucide-react';
 
 const SHORTCUTS = [
-  { href: '/inbox', icon: Inbox, label: 'Idé-pott' },
+  { href: '/marked', icon: Store, label: 'Marked' },
   { href: '/training', icon: Dumbbell, label: 'Trening' },
   { href: '/recipes', icon: ChefHat, label: 'Middager' },
   { href: '/shopping', icon: ShoppingBasket, label: 'Handleliste' },
+  { href: '/inbox', icon: Inbox, label: 'Idé-pott' },
+  { href: '/rewards', icon: Trophy, label: 'Belønninger' },
 ] as const;
 
 export function TodayShortcuts() {
   return (
-    <nav aria-label="Snarveier" className="grid grid-cols-4 gap-2">
+    <nav aria-label="Snarveier" className="grid grid-cols-3 gap-2">
       {SHORTCUTS.map(({ href, icon: Icon, label }) => (
         <Link
           key={href}

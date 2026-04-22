@@ -2,7 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Plus, Loader2, Trash2, Sparkles, Trophy, Check, X } from 'lucide-react';
+import {
+  Check,
+  Coins,
+  Gift,
+  Loader2,
+  Plus,
+  Sparkles,
+  Trash2,
+  Trophy,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
@@ -12,6 +22,7 @@ type Reward = {
   title: string;
   emoji: string | null;
   cost_xp: number;
+  cost_tokens: number;
   created_by: string | null;
   created_at: string;
 };
@@ -24,37 +35,61 @@ type Redemption = {
   redeemed_at: string;
 };
 
+type Voucher = {
+  id: string;
+  reward_id: string;
+  earned_at: string;
+  redeemed_at: string | null;
+  from_task_id: string | null;
+};
+
 const PRESETS = ['🎮', '📱', '🍿', '💰', '🍦', '🎬', '⏱️', '🎁'];
 
 export function RewardsClient({
   initialRewards,
   initialRecent,
-  initialBalance,
+  initialVouchers,
+  initialXp,
+  initialTokens,
   currentUserId,
 }: {
   initialRewards: Reward[];
   initialRecent: Redemption[];
-  initialBalance: number;
+  initialVouchers: Voucher[];
+  initialXp: number;
+  initialTokens: number;
   currentUserId: string;
 }) {
   const router = useRouter();
   const [rewards, setRewards] = useState<Reward[]>(initialRewards);
   const [recent, setRecent] = useState<Redemption[]>(initialRecent);
-  const [balance, setBalance] = useState(initialBalance);
+  const [vouchers, setVouchers] = useState<Voucher[]>(initialVouchers);
+  const [xp, setXp] = useState(initialXp);
+  const [tokens, setTokens] = useState(initialTokens);
   const [creating, setCreating] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [emoji, setEmoji] = useState('🎁');
-  const [cost, setCost] = useState<number | ''>(50);
+  const [costXp, setCostXp] = useState<number | ''>(0);
+  const [costTokens, setCostTokens] = useState<number | ''>(10);
   const [error, setError] = useState<string | null>(null);
   const [redeeming, setRedeeming] = useState<string | null>(null);
+  const [redeemingVoucher, setRedeemingVoucher] = useState<string | null>(null);
+
+  const unredeemedVouchers = vouchers.filter((v) => !v.redeemed_at);
 
   async function createReward(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const costNum = typeof cost === 'number' ? cost : parseInt(String(cost), 10);
-    if (!title.trim() || !costNum || costNum <= 0) {
-      setError('Fyll ut navn og gyldig XP-pris.');
+    const xpNum = typeof costXp === 'number' ? costXp : parseInt(String(costXp), 10) || 0;
+    const tokNum =
+      typeof costTokens === 'number' ? costTokens : parseInt(String(costTokens), 10) || 0;
+    if (!title.trim()) {
+      setError('Fyll ut navn.');
+      return;
+    }
+    if (xpNum <= 0 && tokNum <= 0) {
+      setError('Sett en pris i XP, tokens eller begge.');
       return;
     }
     setCreating(true);
@@ -62,16 +97,24 @@ export function RewardsClient({
       const res = await fetch('/api/rewards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), emoji, costXp: costNum }),
+        body: JSON.stringify({
+          title: title.trim(),
+          emoji,
+          costXp: xpNum,
+          costTokens: tokNum,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? 'Kunne ikke opprette');
       }
       const { reward } = (await res.json()) as { reward: Reward };
-      setRewards((prev) => [...prev, reward].sort((a, b) => a.cost_xp - b.cost_xp));
+      setRewards((prev) =>
+        [...prev, reward].sort((a, b) => (a.cost_xp || 0) - (b.cost_xp || 0)),
+      );
       setTitle('');
-      setCost(50);
+      setCostXp(0);
+      setCostTokens(10);
       setEmoji('🎁');
       setFormOpen(false);
     } catch (err) {
@@ -81,14 +124,14 @@ export function RewardsClient({
     }
   }
 
-  async function redeem(reward: Reward) {
-    if (balance < reward.cost_xp) return;
+  async function redeem(reward: Reward, currency: 'xp' | 'tokens') {
     setRedeeming(reward.id);
+    setError(null);
     try {
       const res = await fetch(`/api/rewards/${reward.id}/redeem`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ currency }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -96,20 +139,46 @@ export function RewardsClient({
         return;
       }
       const { balance: newBal } = (await res.json()) as { balance: number };
-      setBalance(newBal);
-      setRecent((prev) => [
-        {
-          id: crypto.randomUUID(),
-          reward_id: reward.id,
-          user_id: currentUserId,
-          xp_spent: reward.cost_xp,
-          redeemed_at: new Date().toISOString(),
-        },
-        ...prev,
-      ].slice(0, 10));
+      if (currency === 'xp') setXp(newBal);
+      else setTokens(newBal);
+      if (currency === 'xp') {
+        setRecent((prev) =>
+          [
+            {
+              id: crypto.randomUUID(),
+              reward_id: reward.id,
+              user_id: currentUserId,
+              xp_spent: reward.cost_xp,
+              redeemed_at: new Date().toISOString(),
+            },
+            ...prev,
+          ].slice(0, 10),
+        );
+      }
       router.refresh();
     } finally {
       setRedeeming(null);
+    }
+  }
+
+  async function redeemVoucher(voucher: Voucher) {
+    if (redeemingVoucher) return;
+    setRedeemingVoucher(voucher.id);
+    try {
+      const res = await fetch(`/api/vouchers/${voucher.id}/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        setVouchers((prev) =>
+          prev.map((v) =>
+            v.id === voucher.id ? { ...v, redeemed_at: new Date().toISOString() } : v,
+          ),
+        );
+      }
+    } finally {
+      setRedeemingVoucher(null);
     }
   }
 
@@ -123,22 +192,82 @@ export function RewardsClient({
 
   return (
     <div className="space-y-5">
-      <header className="rounded-3xl grad-hero border p-5 flex items-center gap-4 soft-shadow">
-        <div className="h-14 w-14 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 soft-shadow">
-          <Trophy className="h-7 w-7" />
+      <header className="rounded-3xl grad-hero border p-5 soft-shadow">
+        <div className="flex items-center gap-4">
+          <div className="h-14 w-14 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 soft-shadow">
+            <Trophy className="h-7 w-7" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
+              Dine saldoer
+            </p>
+            <h1 className="text-xl font-bold leading-tight">Belønninger</h1>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
-            Din XP-saldo
-          </p>
-          <h1 className="text-3xl font-bold leading-tight">
-            {balance} <span className="text-base font-semibold text-muted-foreground">XP</span>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Tjen ved å fullføre vaner og oppdrag
-          </p>
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          <div className="rounded-xl bg-card/60 border px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold inline-flex items-center gap-1">
+              <Trophy className="h-3 w-3" /> XP
+            </p>
+            <p className="text-2xl font-bold tabular">{xp}</p>
+          </div>
+          <div className="rounded-xl bg-card/60 border px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold inline-flex items-center gap-1">
+              <Coins className="h-3 w-3" /> Tokens
+            </p>
+            <p className="text-2xl font-bold tabular">{tokens}</p>
+          </div>
         </div>
       </header>
+
+      {unredeemedVouchers.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-1">
+            Din beholdning · {unredeemedVouchers.length}
+          </h2>
+          <ul className="space-y-2">
+            {unredeemedVouchers.map((v) => {
+              const r = rewardMap.get(v.reward_id);
+              return (
+                <li
+                  key={v.id}
+                  className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-3 soft-shadow"
+                >
+                  <div className="h-10 w-10 rounded-xl grad-primary text-primary-foreground flex items-center justify-center text-xl flex-shrink-0">
+                    {r?.emoji ?? '🎁'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">
+                      {r?.title ?? 'Belønning'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Tjent {new Date(v.earned_at).toLocaleDateString('nb-NO', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => redeemVoucher(v)}
+                    disabled={redeemingVoucher === v.id}
+                    className="grad-primary text-primary-foreground border-transparent"
+                  >
+                    {redeemingVoucher === v.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5 mr-1" /> Bruk
+                      </>
+                    )}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between px-1">
@@ -150,7 +279,9 @@ export function RewardsClient({
             onClick={() => setFormOpen((v) => !v)}
             className={cn(
               'inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors',
-              formOpen ? 'bg-muted border-border' : 'hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
+              formOpen
+                ? 'bg-muted border-border'
+                : 'hover:border-primary/40 hover:bg-primary/5 hover:text-primary',
             )}
           >
             {formOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -182,19 +313,44 @@ export function RewardsClient({
                   maxLength={120}
                 />
               </div>
-              <div className="w-24">
-                <label className="text-[11px] font-medium text-muted-foreground">XP</label>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
+                  <Trophy className="h-3 w-3" /> XP-pris
+                </label>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  value={cost === '' ? '' : cost}
+                  value={costXp === '' ? '' : costXp}
                   onChange={(e) =>
-                    setCost(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 0))
+                    setCostXp(
+                      e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0),
+                    )
                   }
-                  min={1}
+                  min={0}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
+                  <Coins className="h-3 w-3" /> Token-pris
+                </label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  value={costTokens === '' ? '' : costTokens}
+                  onChange={(e) =>
+                    setCostTokens(
+                      e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0),
+                    )
+                  }
+                  min={0}
                 />
               </div>
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              Sett minst én pris. Hvis begge er satt, kan man betale med valgfri valuta.
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {PRESETS.map((p) => (
                 <button
@@ -228,63 +384,108 @@ export function RewardsClient({
             </div>
             <p className="text-sm font-medium">Ingen belønninger ennå</p>
             <p className="text-xs text-muted-foreground">
-              Lag en – f.eks. «30 min TikTok» for 100 XP.
+              Lag en – f.eks. «30 min TikTok» for 50 tokens.
             </p>
           </div>
         ) : (
           <ul className="space-y-2">
             {rewards.map((r) => {
-              const affordable = balance >= r.cost_xp;
+              const canXp = r.cost_xp > 0 && xp >= r.cost_xp;
+              const canTokens = r.cost_tokens > 0 && tokens >= r.cost_tokens;
+              const anyAffordable = canXp || canTokens;
               return (
                 <li
                   key={r.id}
                   className={cn(
-                    'flex items-center gap-3 rounded-2xl border bg-card p-4 soft-shadow',
-                    !affordable && 'opacity-70',
+                    'rounded-2xl border bg-card p-4 space-y-2 soft-shadow',
+                    !anyAffordable && 'opacity-70',
                   )}
                 >
-                  <div
-                    className={cn(
-                      'h-11 w-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0',
-                      affordable ? 'bg-primary/15' : 'bg-muted',
-                    )}
-                  >
-                    {r.emoji ?? '🎁'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{r.title}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {r.cost_xp} XP
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!affordable || redeeming === r.id}
-                    onClick={() => redeem(r)}
-                    className={cn(
-                      'border-transparent',
-                      affordable ? 'grad-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-                    )}
-                  >
-                    {redeeming === r.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : affordable ? (
-                      <><Sparkles className="h-3.5 w-3.5 mr-1" /> Løs inn</>
-                    ) : (
-                      `-${r.cost_xp - balance}`
-                    )}
-                  </Button>
-                  {r.created_by === currentUserId && (
-                    <button
-                      type="button"
-                      onClick={() => remove(r.id)}
-                      className="text-muted-foreground/60 hover:text-destructive flex-shrink-0"
-                      aria-label="Slett"
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        'h-11 w-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0',
+                        anyAffordable ? 'bg-primary/15' : 'bg-muted',
+                      )}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                      {r.emoji ?? '🎁'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{r.title}</p>
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                        {r.cost_xp > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Trophy className="h-3 w-3" /> {r.cost_xp}
+                          </span>
+                        )}
+                        {r.cost_tokens > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Coins className="h-3 w-3" /> {r.cost_tokens}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {r.created_by === currentUserId && (
+                      <button
+                        type="button"
+                        onClick={() => remove(r.id)}
+                        className="text-muted-foreground/60 hover:text-destructive flex-shrink-0"
+                        aria-label="Slett"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {r.cost_xp > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!canXp || redeeming === r.id}
+                        onClick={() => redeem(r, 'xp')}
+                        className={cn(
+                          'flex-1 border-transparent',
+                          canXp
+                            ? 'grad-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {redeeming === r.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : canXp ? (
+                          <>
+                            <Trophy className="h-3.5 w-3.5 mr-1" /> {r.cost_xp} XP
+                          </>
+                        ) : (
+                          `-${r.cost_xp - xp} XP`
+                        )}
+                      </Button>
+                    )}
+                    {r.cost_tokens > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!canTokens || redeeming === r.id}
+                        onClick={() => redeem(r, 'tokens')}
+                        className={cn(
+                          'flex-1 border-transparent',
+                          canTokens
+                            ? 'grad-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {redeeming === r.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : canTokens ? (
+                          <>
+                            <Coins className="h-3.5 w-3.5 mr-1" /> {r.cost_tokens}
+                          </>
+                        ) : (
+                          `-${r.cost_tokens - tokens} tokens`
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </li>
               );
             })}

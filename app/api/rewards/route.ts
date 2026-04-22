@@ -5,11 +5,16 @@ import { getOrCreateHouseholdId } from '@/lib/household';
 
 export const runtime = 'nodejs';
 
-const bodySchema = z.object({
-  title: z.string().trim().min(1).max(120),
-  emoji: z.string().trim().min(1).max(8).optional(),
-  costXp: z.number().int().positive().max(10000),
-});
+const bodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    emoji: z.string().trim().min(1).max(8).optional(),
+    costXp: z.number().int().min(0).max(100000).default(0),
+    costTokens: z.number().int().min(0).max(100000).default(0),
+  })
+  .refine((d) => d.costXp > 0 || d.costTokens > 0, {
+    message: 'Belønningen må koste enten XP eller tokens.',
+  });
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -19,7 +24,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: 'invalid request' }, { status: 400 });
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? 'invalid request' },
+      { status: 400 },
+    );
   }
 
   let householdId: string;
@@ -39,9 +47,10 @@ export async function POST(request: NextRequest) {
       title: parsed.data.title,
       emoji: parsed.data.emoji ?? null,
       cost_xp: parsed.data.costXp,
+      cost_tokens: parsed.data.costTokens,
       created_by: user.id,
     })
-    .select('id, title, emoji, cost_xp, created_at')
+    .select('id, title, emoji, cost_xp, cost_tokens, created_at')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

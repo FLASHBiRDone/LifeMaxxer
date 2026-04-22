@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getXpBalance } from '@/lib/xp';
+import { getTokenBalance } from '@/lib/tokens';
 import { RewardsClient } from '@/components/rewards/rewards-client';
 
 export const dynamic = 'force-dynamic';
@@ -10,19 +11,21 @@ export default async function RewardsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: memberships }, xp] = await Promise.all([
+  const [{ data: memberships }, xp, tokens] = await Promise.all([
     supabase.from('household_members').select('household_id').eq('user_id', user.id),
     getXpBalance(supabase, user.id),
+    getTokenBalance(supabase, user.id),
   ]);
   const householdIds = ((memberships as any[] | null) ?? []).map((m) => m.household_id);
 
   let rewards: any[] = [];
   let recent: any[] = [];
+  let vouchers: any[] = [];
   if (householdIds.length > 0) {
-    const [{ data: r }, { data: hist }] = await Promise.all([
+    const [{ data: r }, { data: hist }, { data: vs }] = await Promise.all([
       supabase
         .from('rewards')
-        .select('id, title, emoji, cost_xp, created_by, created_at')
+        .select('id, title, emoji, cost_xp, cost_tokens, created_by, created_at')
         .in('household_id', householdIds)
         .eq('archived', false)
         .order('cost_xp', { ascending: true }),
@@ -32,9 +35,16 @@ export default async function RewardsPage() {
         .in('household_id', householdIds)
         .order('redeemed_at', { ascending: false })
         .limit(10),
+      supabase
+        .from('reward_vouchers')
+        .select('id, reward_id, earned_at, redeemed_at, from_task_id')
+        .eq('user_id', user.id)
+        .order('earned_at', { ascending: false })
+        .limit(30),
     ]);
     rewards = (r as any[]) ?? [];
     recent = (hist as any[]) ?? [];
+    vouchers = (vs as any[]) ?? [];
   }
 
   return (
@@ -42,7 +52,9 @@ export default async function RewardsPage() {
       <RewardsClient
         initialRewards={rewards}
         initialRecent={recent}
-        initialBalance={xp.balance}
+        initialVouchers={vouchers}
+        initialXp={xp.balance}
+        initialTokens={tokens.balance}
         currentUserId={user.id}
       />
     </main>
