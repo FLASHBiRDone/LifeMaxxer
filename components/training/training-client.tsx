@@ -285,7 +285,14 @@ export function TrainingClient({
           onCancel={preferences ? () => setShowSetup(false) : undefined}
           saving={savingPrefs || generating}
         />
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && (
+          <div
+            role="alert"
+            className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive break-words"
+          >
+            {error}
+          </div>
+        )}
       </div>
     );
   }
@@ -385,7 +392,14 @@ export function TrainingClient({
             </Button>
           </div>
 
-          {error && <p className="text-xs text-destructive px-1">{error}</p>}
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive break-words"
+            >
+              {error}
+            </div>
+          )}
 
           <ul className="space-y-2.5">
             {plan.days.map((d, idx) => {

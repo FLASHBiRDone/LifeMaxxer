@@ -7,30 +7,30 @@ import type {
 } from '@/lib/prompts';
 
 const exerciseSchema = z.object({
-  name: z.string().min(1).max(120),
-  sets: z.number().int().min(1).max(20),
-  reps: z.string().min(1).max(40),
-  restSeconds: z.number().int().min(0).max(600),
-  notes: z.string().max(200).optional(),
+  name: z.string().min(1).max(160),
+  sets: z.number().int().min(0).max(30),
+  reps: z.string().min(1).max(60),
+  restSeconds: z.number().int().min(0).max(900),
+  notes: z.string().max(400).optional(),
 });
 
 const daySchema = z.object({
   day: z.string().min(1).max(40),
   type: z.enum(['strength', 'cardio', 'conditioning', 'mobility', 'rest']),
-  title: z.string().min(1).max(120),
-  duration: z.number().int().min(0).max(240),
-  focus: z.string().min(1).max(200),
-  warmup: z.array(z.string().min(1).max(200)).max(10),
-  exercises: z.array(exerciseSchema).max(20),
-  cooldown: z.array(z.string().min(1).max(200)).max(10),
+  title: z.string().min(1).max(160),
+  duration: z.number().int().min(0).max(300),
+  focus: z.string().min(1).max(300),
+  warmup: z.array(z.string().min(1).max(300)).max(15).default([]),
+  exercises: z.array(exerciseSchema).max(25).default([]),
+  cooldown: z.array(z.string().min(1).max(300)).max(15).default([]),
 });
 
 const planSchema = z.object({
-  summary: z.string().min(1).max(400),
-  weeksSuggested: z.number().int().min(1).max(16),
-  progressionTips: z.array(z.string().min(1).max(300)).min(1).max(10),
-  safetyNotes: z.array(z.string().min(1).max(300)).min(0).max(10),
-  days: z.array(daySchema).length(7),
+  summary: z.string().min(1).max(800),
+  weeksSuggested: z.number().int().min(1).max(26).default(6),
+  progressionTips: z.array(z.string().min(1).max(500)).max(15).default([]),
+  safetyNotes: z.array(z.string().min(1).max(500)).max(15).default([]),
+  days: z.array(daySchema).min(5).max(9),
 });
 
 export type TrainingPlanResult = {
@@ -110,8 +110,51 @@ export async function generateTrainingPlan(
     .trim();
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('training plan response did not contain JSON');
-  const output = planSchema.parse(JSON.parse(jsonMatch[0]));
+  if (!jsonMatch) {
+    console.error('[training-plan] no JSON in response:', text.slice(0, 600));
+    throw new Error('training plan response did not contain JSON');
+  }
+
+  let parsed: z.infer<typeof planSchema>;
+  try {
+    parsed = planSchema.parse(JSON.parse(jsonMatch[0]));
+  } catch (err) {
+    console.error(
+      '[training-plan] zod rejected response:',
+      err instanceof Error ? err.message : String(err),
+    );
+    console.error('[training-plan] raw JSON:', jsonMatch[0].slice(0, 1200));
+    throw new Error(
+      `training plan response failed validation: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  // Normalize to exactly 7 days so the rest of the system (UI indices,
+  // calendar week mapping, habit sync) stays consistent.
+  const DAY_NAMES_NB = [
+    'Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag',
+  ];
+  const DAY_NAMES_EN = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+  ];
+  const names = params.locale === 'nb' ? DAY_NAMES_NB : DAY_NAMES_EN;
+  while (parsed.days.length < 7) {
+    parsed.days.push({
+      day: names[parsed.days.length],
+      type: 'rest',
+      title: params.locale === 'nb' ? 'Hvile' : 'Rest',
+      duration: 0,
+      focus: params.locale === 'nb' ? 'Fullstendig hvile' : 'Complete rest',
+      warmup: [],
+      exercises: [],
+      cooldown: [],
+    });
+  }
+  if (parsed.days.length > 7) parsed.days = parsed.days.slice(0, 7);
+
+  const output = parsed as TrainingPlanOutput;
 
   const tokensIn = res.usage.input_tokens;
   const tokensOut = res.usage.output_tokens;
