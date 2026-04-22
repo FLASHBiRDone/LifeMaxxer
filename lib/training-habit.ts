@@ -1,10 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { osloDayBounds } from '@/lib/time';
 
+const TRAINING_HABIT_NAME = 'Trening';
+
 /**
- * Ensure the user has a habit linked in their training_preferences. If
- * training_habit_id is set and the habit is still un-archived, return it.
- * Otherwise create a new "Trening" habit and persist the id.
+ * Ensure the user has a "Trening" habit linked in their
+ * training_preferences. Rules:
+ *  - If a linked habit exists and is NOT archived, return its id.
+ *  - If a linked habit exists and IS archived, return null. The user
+ *    archived it on purpose — don't resurrect it as a duplicate.
+ *  - If no linked habit exists (null id or dangling reference), first
+ *    look for an existing un-archived "Trening" habit by name and link
+ *    to it. Only create a new row when none exists.
  */
 export async function ensureTrainingHabit(
   supabase: SupabaseClient,
@@ -25,14 +32,43 @@ export async function ensureTrainingHabit(
       .select('id, archived')
       .eq('id', existingId)
       .maybeSingle();
-    if (habit && !(habit as any).archived) return existingId;
+    if (habit) {
+      // If the linked habit is archived, respect the user's choice and
+      // do not auto-create a replacement.
+      if ((habit as any).archived) return null;
+      return existingId;
+    }
+    // Dangling reference (habit hard-deleted) — fall through to lookup.
   }
+
+  // Try to adopt an existing un-archived habit with the same name so we
+  // never create a second one on top of an orphaned first.
+  const { data: byName } = await supabase
+    .from('habits')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('archived', false)
+    .ilike('name', TRAINING_HABIT_NAME)
+    .limit(1)
+    .maybeSingle();
+  if (byName) {
+    const id = (byName as any).id as string;
+    await supabase
+      .from('training_preferences')
+      .update({ training_habit_id: id, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+    return id;
+  }
+
+  // If we got here via "no linked id" (not via archived-linked), create
+  // a fresh habit. Any archived linked id already returned null above.
+  if (existingId) return null;
 
   const { data: created, error } = await supabase
     .from('habits')
     .insert({
       user_id: userId,
-      name: 'Trening',
+      name: TRAINING_HABIT_NAME,
       kind: 'do',
       target_frequency: 'daily',
       color: 'teal',
