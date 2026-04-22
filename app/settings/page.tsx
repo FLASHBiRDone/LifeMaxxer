@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { PushToggle } from '@/components/settings/push-toggle';
 import { NotificationPreferences } from '@/components/settings/notification-prefs';
 import { GoogleCalendarCard } from '@/components/settings/google-calendar';
+import { HouseholdCard } from '@/components/settings/household-card';
 import { SignOutButton } from '@/components/settings/sign-out';
 
 export const dynamic = 'force-dynamic';
@@ -20,20 +21,82 @@ export default async function SettingsPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: settings }, { data: gtok }] = await Promise.all([
-    supabase
-      .from('user_settings')
-      .select(
-        'push_enabled, morning_briefing_enabled, dinner_panic_enabled, weekly_debrief_enabled',
-      )
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('google_tokens')
-      .select('expires_at')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-  ]);
+  const [{ data: settings }, { data: gtok }, { data: profile }, { data: membership }] =
+    await Promise.all([
+      supabase
+        .from('user_settings')
+        .select(
+          'push_enabled, morning_briefing_enabled, dinner_panic_enabled, weekly_debrief_enabled',
+        )
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('google_tokens')
+        .select('expires_at')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('user_profiles')
+        .select('display_name')
+        .eq('id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('household_members')
+        .select('household_id, role')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  let household: any = null;
+  let householdRole: string | null = null;
+  let householdMembers: any[] = [];
+  let householdInvites: any[] = [];
+  if ((membership as any)?.household_id) {
+    const householdId = (membership as any).household_id as string;
+    householdRole = (membership as any).role as string;
+    const [{ data: hh }, { data: mems }, { data: invs }] = await Promise.all([
+      supabase
+        .from('households')
+        .select('id, name, created_by, created_at')
+        .eq('id', householdId)
+        .maybeSingle(),
+      supabase
+        .from('household_members')
+        .select('user_id, role, joined_at')
+        .eq('household_id', householdId),
+      supabase
+        .from('household_invites')
+        .select('id, code, role, created_at, expires_at, used_at')
+        .eq('household_id', householdId)
+        .is('used_at', null)
+        .order('created_at', { ascending: false }),
+    ]);
+    household = hh;
+    const memList = (mems as any[]) ?? [];
+    if (memList.length > 0) {
+      const { data: profs } = await supabase
+        .from('user_profiles')
+        .select('id, email, display_name')
+        .in('id', memList.map((m) => m.user_id));
+      const profMap = new Map(((profs as any[]) ?? []).map((p) => [p.id, p]));
+      householdMembers = memList.map((m) => {
+        const p = profMap.get(m.user_id);
+        return {
+          user_id: m.user_id,
+          role: m.role,
+          joined_at: m.joined_at,
+          email: p?.email ?? null,
+          display_name: p?.display_name ?? null,
+          is_me: m.user_id === user.id,
+        };
+      });
+    }
+    const now = Date.now();
+    householdInvites = ((invs as any[]) ?? []).filter(
+      (i) => new Date(i.expires_at).getTime() > now,
+    );
+  }
 
   const params = await searchParams;
   const gcalStatus = typeof params.gcal === 'string' ? params.gcal : null;
@@ -67,6 +130,13 @@ export default async function SettingsPage({
       </section>
 
       <div className="space-y-4">
+        <HouseholdCard
+          household={household}
+          role={householdRole}
+          members={householdMembers}
+          invites={householdInvites}
+          currentDisplayName={(profile as any)?.display_name ?? null}
+        />
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
         <NotificationPreferences

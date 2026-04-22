@@ -28,6 +28,24 @@ export default async function TodayPage() {
   const weekStart = weekDays[0].start.toISOString();
   const weekEnd = weekDays[6].end.toISOString();
 
+  const { data: membership } = await supabase
+    .from('household_members')
+    .select('household_id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle();
+  const householdId = (membership as any)?.household_id as string | undefined;
+
+  let questFilter = supabase
+    .from('quests')
+    .select(
+      'id, title, completed_at, is_main, user_id, household_id, completed_by_user_id',
+    )
+    .eq('scheduled_for', dateString);
+  questFilter = householdId
+    ? questFilter.or(`user_id.eq.${user.id},household_id.eq.${householdId}`)
+    : questFilter.eq('user_id', user.id);
+
   const [
     { data: briefingRow },
     { data: quests },
@@ -44,12 +62,7 @@ export default async function TodayPage() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from('quests')
-      .select('id, title, completed_at, is_main')
-      .eq('user_id', user.id)
-      .eq('scheduled_for', dateString)
-      .order('is_main', { ascending: false }),
+    questFilter.order('is_main', { ascending: false }),
     supabase
       .from('mana_logs')
       .select('level')
@@ -90,7 +103,54 @@ export default async function TodayPage() {
   }
 
   const habitsDone = habitsList.filter((h: any) => loggedSet.has(h.id)).length;
-  const questsList = (quests as any[]) ?? [];
+  const rawQuests = (quests as any[]) ?? [];
+
+  const completerIds = Array.from(
+    new Set(
+      rawQuests
+        .map((q) => q.completed_by_user_id)
+        .filter((id): id is string => Boolean(id) && id !== user.id),
+    ),
+  );
+  let completerMap = new Map<string, { display_name: string | null; email: string | null }>();
+  if (completerIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('user_profiles')
+      .select('id, email, display_name')
+      .in('id', completerIds);
+    completerMap = new Map(
+      ((profs as any[]) ?? []).map((p) => [
+        p.id,
+        { display_name: p.display_name ?? null, email: p.email ?? null },
+      ]),
+    );
+  }
+
+  const questsList = rawQuests.map((q) => {
+    const isFamily = Boolean(q.household_id);
+    let completerInitial: string | null = null;
+    let completerLabel: string | null = null;
+    if (q.completed_by_user_id) {
+      if (q.completed_by_user_id === user.id) {
+        completerInitial = 'Du';
+        completerLabel = 'Du';
+      } else {
+        const p = completerMap.get(q.completed_by_user_id);
+        const src = p?.display_name ?? p?.email ?? '?';
+        completerInitial = src.charAt(0).toUpperCase();
+        completerLabel = p?.display_name ?? p?.email ?? 'Medlem';
+      }
+    }
+    return {
+      id: q.id,
+      title: q.title,
+      completed_at: q.completed_at,
+      is_main: q.is_main,
+      is_family: isFamily,
+      completer_initial: completerInitial,
+      completer_label: completerLabel,
+    };
+  });
   const questsDone = questsList.filter((q) => q.completed_at).length;
 
   // Count unique habit×day pairs logged this week (past + today only)

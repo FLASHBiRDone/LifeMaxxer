@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Check, Sparkles } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { Check, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 type Quest = {
@@ -10,6 +9,9 @@ type Quest = {
   title: string;
   completed_at: string | null;
   is_main: boolean;
+  is_family: boolean;
+  completer_initial: string | null;
+  completer_label: string | null;
 };
 
 export function TodayQuests({ quests }: { quests: Quest[] }) {
@@ -21,14 +23,23 @@ export function TodayQuests({ quests }: { quests: Quest[] }) {
   function toggle(quest: Quest) {
     const nextCompleted = quest.completed_at ? null : new Date().toISOString();
     setItems((prev) =>
-      prev.map((q) => (q.id === quest.id ? { ...q, completed_at: nextCompleted } : q)),
+      prev.map((q) =>
+        q.id === quest.id
+          ? {
+              ...q,
+              completed_at: nextCompleted,
+              completer_initial: nextCompleted ? 'Du' : null,
+              completer_label: nextCompleted ? 'Du' : null,
+            }
+          : q,
+      ),
     );
     startTransition(async () => {
-      const supabase = createClient();
-      await supabase
-        .from('quests')
-        .update({ completed_at: nextCompleted })
-        .eq('id', quest.id);
+      await fetch(`/api/quests/${quest.id}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
     });
   }
 
@@ -64,14 +75,35 @@ export function TodayQuests({ quests }: { quests: Quest[] }) {
                 >
                   {done && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
                 </span>
-                <span
-                  className={cn(
-                    'flex-1 text-sm leading-snug font-medium',
-                    done && 'line-through text-muted-foreground',
+                <span className="flex-1 min-w-0">
+                  <span
+                    className={cn(
+                      'block text-sm leading-snug font-medium',
+                      done && 'line-through text-muted-foreground',
+                    )}
+                  >
+                    {q.title}
+                  </span>
+                  {q.is_family && (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                      <Users className="h-3 w-3" /> Familie
+                      {done && q.completer_label && (
+                        <span className="text-muted-foreground/80 normal-case tracking-normal">
+                          · {q.completer_label}
+                        </span>
+                      )}
+                    </span>
                   )}
-                >
-                  {q.title}
                 </span>
+                {done && q.is_family && q.completer_initial && (
+                  <span
+                    className="h-6 w-6 rounded-full grad-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5"
+                    aria-label={q.completer_label ?? undefined}
+                    title={q.completer_label ?? undefined}
+                  >
+                    {q.completer_initial.slice(0, 2)}
+                  </span>
+                )}
                 {q.is_main && !done && (
                   <span className="text-[10px] uppercase tracking-wider font-bold text-primary flex-shrink-0 mt-1">
                     hoved
