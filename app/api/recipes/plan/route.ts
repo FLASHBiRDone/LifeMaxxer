@@ -106,3 +106,49 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/**
+ * Delete the user's current meal plan (latest by created_at) along with
+ * all of its Google Calendar events. Use ?id=UUID to target a specific
+ * plan instead of the latest.
+ */
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(request.url);
+  const targetId = url.searchParams.get('id');
+
+  let planId: string | null = targetId;
+  if (!planId) {
+    const { data: row } = await supabase
+      .from('ai_messages')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('context_type', 'meal_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    planId = (row as any)?.id ?? null;
+  }
+  if (!planId) {
+    return NextResponse.json({ error: 'Ingen plan å slette' }, { status: 404 });
+  }
+
+  const { clearPlanEvents } = await import('@/lib/calendar-cleanup');
+  try {
+    await clearPlanEvents(supabase, user.id, planId);
+  } catch (err) {
+    console.error('[meal-plan] delete: event cleanup failed', err);
+  }
+
+  const { error } = await supabase
+    .from('ai_messages')
+    .delete()
+    .eq('id', planId)
+    .eq('user_id', user.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

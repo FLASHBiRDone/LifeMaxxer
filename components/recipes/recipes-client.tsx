@@ -15,6 +15,7 @@ import {
   CalendarCheck,
   Shuffle,
   CalendarRange,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ type MealPlan = {
     cookMinutes: number;
     ingredients: { name: string; amount: string }[];
     instructions: string[];
+    skipped?: boolean;
   }>;
 };
 
@@ -91,6 +93,9 @@ export function RecipesClient({
   const [notes, setNotes] = useState<string>(initialPlan?.params.notes ?? '');
   const [generating, setGenerating] = useState(false);
   const [swappingDay, setSwappingDay] = useState<number | null>(null);
+  const [deletingDay, setDeletingDay] = useState<number | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState(false);
+  const [formOpen, setFormOpen] = useState<boolean>(!initialPlan);
   const [shoppingOpen, setShoppingOpen] = useState(false);
   const [addedToShopping, setAddedToShopping] = useState<number | null>(null);
   const [addingToCalendar, setAddingToCalendar] = useState(false);
@@ -134,6 +139,7 @@ export function RecipesClient({
       setPlanId(messageId ?? null);
       setPlanCreatedAt(createdAt ?? null);
       setOpenDay(0);
+      setFormOpen(false);
       if (calendar?.status === 'added') {
         setCalendarStatus({ kind: 'added', count: calendar.created });
       } else if (calendar?.status === 'skipped' && calendar.reason === 'no_tokens') {
@@ -174,6 +180,61 @@ export function RecipesClient({
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
       setSwappingDay(null);
+    }
+  }
+
+  async function deleteDay(dayIndex: number) {
+    if (!planId || deletingDay !== null) return;
+    setDeletingDay(dayIndex);
+    setError(null);
+    try {
+      const res = await fetch('/api/recipes/plan/day', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planMessageId: planId, dayIndex }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke slette dag');
+      }
+      const { day } = await res.json();
+      setPlan((p) => {
+        if (!p) return p;
+        const nextDays = [...p.days];
+        nextDays[dayIndex] = day;
+        return { ...p, days: nextDays };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setDeletingDay(null);
+    }
+  }
+
+  async function deletePlan() {
+    if (!planId || deletingPlan) return;
+    const confirmed = window.confirm(
+      'Er du sikker på at du vil slette hele middagsplanen? Kalender-hendelsene fjernes også.',
+    );
+    if (!confirmed) return;
+    setDeletingPlan(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/recipes/plan?id=${planId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke slette plan');
+      }
+      setPlan(null);
+      setPlanId(null);
+      setPlanCreatedAt(null);
+      setOpenDay(null);
+      setCalendarStatus(null);
+      setFormOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setDeletingPlan(false);
     }
   }
 
@@ -218,6 +279,33 @@ export function RecipesClient({
         </div>
       </header>
 
+      {plan && !formOpen && (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFormOpen(true)}
+            className="flex-1"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" /> Lag ny plan
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={deletePlan}
+            disabled={deletingPlan}
+            className="text-destructive border-destructive/40 hover:bg-destructive/5"
+          >
+            {deletingPlan ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      )}
+
+      {(!plan || formOpen) && (
       <form onSubmit={generate} className="rounded-3xl border bg-card p-5 space-y-4 soft-shadow">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
@@ -337,6 +425,7 @@ export function RecipesClient({
         </Button>
         {error && <p className="text-xs text-destructive">{error}</p>}
       </form>
+      )}
 
       {plan && (
         <>
@@ -396,32 +485,52 @@ export function RecipesClient({
             {plan.days.map((d, idx) => {
               const isOpen = openDay === idx;
               const total = d.prepMinutes + d.cookMinutes;
+              const isSkipped = Boolean(d.skipped);
               return (
                 <li
                   key={idx}
-                  className="rounded-2xl border bg-card overflow-hidden soft-shadow"
+                  className={cn(
+                    'rounded-2xl border overflow-hidden soft-shadow',
+                    isSkipped ? 'bg-muted/40 border-border/60' : 'bg-card',
+                  )}
                 >
                   <button
                     type="button"
                     onClick={() => setOpenDay(isOpen ? null : idx)}
                     className="w-full text-left px-4 py-3.5 flex items-start gap-3 hover:bg-accent/5 transition-colors"
                   >
-                    <div className="h-10 w-10 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 text-[10px] font-bold uppercase tracking-wider">
+                    <div
+                      className={cn(
+                        'h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 text-[10px] font-bold uppercase tracking-wider',
+                        isSkipped
+                          ? 'bg-muted text-muted-foreground'
+                          : 'grad-primary text-primary-foreground',
+                      )}
+                    >
                       {d.day.slice(0, 3)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{d.title}</p>
+                      <p
+                        className={cn(
+                          'text-sm font-semibold truncate',
+                          isSkipped && 'text-muted-foreground line-through',
+                        )}
+                      >
+                        {d.title}
+                      </p>
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {d.description}
                       </p>
-                      <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {total} min
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Users className="h-3 w-3" /> {plan.params.people}
-                        </span>
-                      </div>
+                      {!isSkipped && (
+                        <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> {total} min
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="h-3 w-3" /> {plan.params.people}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <ChevronDown
                       className={cn(
@@ -431,7 +540,7 @@ export function RecipesClient({
                     />
                   </button>
 
-                  {isOpen && (
+                  {isOpen && !isSkipped && (
                     <div className="border-t border-border/60 px-4 py-4 space-y-4 bg-muted/20">
                       <div>
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -466,21 +575,57 @@ export function RecipesClient({
                       </div>
 
                       {planId && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => swapDay(idx)}
-                          disabled={swappingDay !== null}
-                          className="w-full"
-                        >
-                          {swappingDay === idx ? (
-                            <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Bytter…</>
-                          ) : (
-                            <><Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt dag</>
-                          )}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => swapDay(idx)}
+                            disabled={swappingDay !== null || deletingDay !== null}
+                            className="flex-1"
+                          >
+                            {swappingDay === idx ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Bytter…</>
+                            ) : (
+                              <><Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt dag</>
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => deleteDay(idx)}
+                            disabled={deletingDay !== null || swappingDay !== null}
+                            className="text-destructive border-destructive/40 hover:bg-destructive/5"
+                            aria-label="Slett dag"
+                          >
+                            {deletingDay === idx ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
                       )}
+                    </div>
+                  )}
+
+                  {isOpen && isSkipped && planId && (
+                    <div className="border-t border-border/60 px-4 py-4 bg-muted/20">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => swapDay(idx)}
+                        disabled={swappingDay !== null}
+                        className="w-full"
+                      >
+                        {swappingDay === idx ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Bytter…</>
+                        ) : (
+                          <><RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Lag ny middag her</>
+                        )}
+                      </Button>
                     </div>
                   )}
                 </li>

@@ -268,3 +268,123 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+const deleteBodySchema = z.object({
+  planMessageId: z.string().uuid(),
+  dayIndex: z.number().int().min(0).max(6),
+});
+
+/**
+ * Turn a training day into a rest day and delete its Google Calendar
+ * event if one exists. Used when the user decides to skip a workout
+ * without regenerating a new one.
+ */
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await request.json().catch(() => ({}));
+  const parsed = deleteBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'invalid request' }, { status: 400 });
+  }
+  const { planMessageId, dayIndex } = parsed.data;
+
+  const { data: row } = await supabase
+    .from('ai_messages')
+    .select('id, content, metadata')
+    .eq('id', planMessageId)
+    .eq('user_id', user.id)
+    .eq('context_type', 'training_plan')
+    .maybeSingle();
+  if (!row?.content) {
+    return NextResponse.json({ error: 'Plan ikke funnet' }, { status: 404 });
+  }
+
+  let plan: any;
+  try {
+    plan = JSON.parse((row as any).content);
+  } catch {
+    return NextResponse.json({ error: 'Plan er ugyldig' }, { status: 400 });
+  }
+  const target = plan.days?.[dayIndex];
+  if (!target) {
+    return NextResponse.json({ error: 'Dag finnes ikke' }, { status: 400 });
+  }
+
+  plan.days[dayIndex] = {
+    day: target.day,
+    type: 'rest',
+    title: 'Hvile',
+    duration: 0,
+    focus: 'Fullstendig hvile',
+    warmup: [],
+    exercises: [],
+    cooldown: [],
+  };
+
+  const { error: updateErr } = await supabase
+    .from('ai_messages')
+    .update({ content: JSON.stringify(plan) })
+    .eq('id', planMessageId);
+  if (updateErr) {
+    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+
+  // Delete this day's calendar event (if it was an active day before)
+  const metadata = ((row as any).metadata ?? {}) as {
+    calendarId?: string;
+    byDay?: Record<number, string>;
+  };
+  const eventId = metadata.byDay?.[dayIndex];
+  const calendarId = metadata.calendarId;
+  let calendarDeleted = false;
+  if (eventId && calendarId) {
+    try {
+      const { data: tokens } = await supabase
+        .from('google_tokens')
+        .select('access_token, refresh_token, expires_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (tokens) {
+        const { client, rotated } = await authorizedClient(tokens as any);
+        if (rotated) {
+          await supabase
+            .from('google_tokens')
+            .update({
+              access_token: rotated.access_token,
+              expires_at: rotated.expires_at,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', user.id);
+        }
+        await deleteEvent(client, eventId, calendarId);
+        const byDay = { ...(metadata.byDay ?? {}) };
+        delete byDay[dayIndex];
+        await supabase
+          .from('ai_messages')
+          .update({ metadata: { ...metadata, byDay } })
+          .eq('id', planMessageId);
+        calendarDeleted = true;
+      }
+    } catch (err) {
+      console.error('[training-day-delete] calendar cleanup failed', err);
+    }
+  }
+
+  // Also clear any exercise logs for that day since the workout is gone
+  await supabase
+    .from('training_exercise_logs')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('plan_message_id', planMessageId)
+    .eq('day_index', dayIndex);
+
+  return NextResponse.json({
+    ok: true,
+    day: plan.days[dayIndex],
+    dayIndex,
+    calendarDeleted,
+  });
+}

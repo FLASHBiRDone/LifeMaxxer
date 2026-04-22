@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Shuffle,
   Sparkles,
+  Trash2,
   TrendingUp,
   Zap,
 } from 'lucide-react';
@@ -88,6 +89,8 @@ export function TrainingClient({
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [togglingKey, setTogglingKey] = useState<ExerciseKey | null>(null);
   const [swappingDay, setSwappingDay] = useState<number | null>(null);
+  const [deletingDay, setDeletingDay] = useState<number | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState<
     | { kind: 'added'; count: number }
     | { kind: 'no_tokens' }
@@ -275,6 +278,71 @@ export function TrainingClient({
     }
   }
 
+  async function deleteDay(dayIndex: number) {
+    if (!planId || deletingDay !== null) return;
+    setDeletingDay(dayIndex);
+    setError(null);
+    try {
+      const res = await fetch('/api/training/plan/day', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planMessageId: planId, dayIndex }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke slette dag');
+      }
+      const { day: newDay } = await res.json();
+      setPlan((p) => {
+        if (!p) return p;
+        const nextDays = [...p.days];
+        nextDays[dayIndex] = newDay;
+        return { ...p, days: nextDays };
+      });
+      setCompletedMap((prev) => {
+        const next = new Set(prev);
+        for (const k of prev) {
+          if (k.startsWith(`${dayIndex}-`)) next.delete(k);
+        }
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setDeletingDay(null);
+    }
+  }
+
+  async function deletePlan() {
+    if (!planId || deletingPlan) return;
+    const confirmed = window.confirm(
+      'Er du sikker på at du vil slette treningsprogrammet? Kalender-hendelsene fjernes også.',
+    );
+    if (!confirmed) return;
+    setDeletingPlan(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/training/plan?id=${planId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke slette plan');
+      }
+      setPlan(null);
+      setPlanId(null);
+      setPlanCreatedAt(null);
+      setIsCommitted(false);
+      setCompletedMap(new Set());
+      setOpenDay(null);
+      setCalendarStatus(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setDeletingPlan(false);
+    }
+  }
+
   if (showSetup) {
     return (
       <div className="space-y-5">
@@ -390,6 +458,22 @@ export function TrainingClient({
                 <><RefreshCw className="h-4 w-4 mr-2" /> Ny plan</>
               )}
             </Button>
+            {planId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={deletePlan}
+                disabled={deletingPlan}
+                className="text-destructive border-destructive/40 hover:bg-destructive/5"
+                aria-label="Slett plan"
+              >
+                {deletingPlan ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
 
           {error && (
@@ -536,25 +620,42 @@ export function TrainingClient({
                       )}
 
                       {planId && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => swapDay(idx)}
-                          disabled={swappingDay !== null}
-                          className="w-full"
-                        >
-                          {swappingDay === idx ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                              Bytter…
-                            </>
-                          ) : (
-                            <>
-                              <Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt økt
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => swapDay(idx)}
+                            disabled={swappingDay !== null || deletingDay !== null}
+                            className="flex-1"
+                          >
+                            {swappingDay === idx ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                Bytter…
+                              </>
+                            ) : (
+                              <>
+                                <Shuffle className="h-3.5 w-3.5 mr-1.5" /> Bytt økt
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => deleteDay(idx)}
+                            disabled={deletingDay !== null || swappingDay !== null}
+                            className="text-destructive border-destructive/40 hover:bg-destructive/5"
+                            aria-label="Gjør til hviledag"
+                          >
+                            {deletingDay === idx ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   )}

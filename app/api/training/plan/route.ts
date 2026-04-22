@@ -74,3 +74,56 @@ export async function POST() {
     );
   }
 }
+
+/**
+ * Delete the user's latest training plan (or a specific one via
+ * ?id=UUID), along with its Google Calendar events. Clears active_plan_id
+ * on training_preferences so the UI drops back to empty state.
+ */
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const url = new URL(request.url);
+  const targetId = url.searchParams.get('id');
+
+  let planId: string | null = targetId;
+  if (!planId) {
+    const { data: row } = await supabase
+      .from('ai_messages')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('context_type', 'training_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    planId = (row as any)?.id ?? null;
+  }
+  if (!planId) {
+    return NextResponse.json({ error: 'Ingen plan å slette' }, { status: 404 });
+  }
+
+  const { clearPlanEvents } = await import('@/lib/calendar-cleanup');
+  try {
+    await clearPlanEvents(supabase, user.id, planId);
+  } catch (err) {
+    console.error('[training-plan] delete: event cleanup failed', err);
+  }
+
+  // Unlink the active plan if this one was it — avoids dangling FK
+  await supabase
+    .from('training_preferences')
+    .update({ active_plan_id: null, updated_at: new Date().toISOString() })
+    .eq('user_id', user.id)
+    .eq('active_plan_id', planId);
+
+  const { error } = await supabase
+    .from('ai_messages')
+    .delete()
+    .eq('id', planId)
+    .eq('user_id', user.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}
