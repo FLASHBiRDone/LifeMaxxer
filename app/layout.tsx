@@ -1,9 +1,22 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import { ThemeProvider } from '@/components/shared/theme-provider';
 import { BottomNav } from '@/components/shared/nav';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'LifeMaxxer',
@@ -41,8 +54,12 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning>
-      <body className="min-h-dvh antialiased pb-[calc(6rem+env(safe-area-inset-bottom))]">
+    <html
+      lang={locale}
+      suppressHydrationWarning
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="min-h-dvh antialiased font-sans pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
