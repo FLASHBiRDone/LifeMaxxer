@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { authorizedClient, createEvent } from '@/lib/google';
+import { createEvent } from '@/lib/google';
 import { mealPlanWeek, osloDateAt } from '@/lib/time';
+import { withLifemaxxingCalendar } from '@/lib/lifemaxxing-calendar';
 
 type MealPlanDay = {
   day: string;
@@ -39,10 +40,6 @@ function buildDescription(day: MealPlanDay): string {
   return lines.join('\n').slice(0, 7000);
 }
 
-/**
- * Create 7 Google Calendar events at 18:00 Oslo time for a meal plan.
- * Silently skips if the user hasn't connected Google Calendar.
- */
 export async function addMealPlanToCalendar(
   supabase: SupabaseClient,
   userId: string,
@@ -52,26 +49,10 @@ export async function addMealPlanToCalendar(
     return { status: 'skipped', reason: 'no_days' };
   }
 
-  const { data: tokens } = await supabase
-    .from('google_tokens')
-    .select('access_token, refresh_token, expires_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!tokens) return { status: 'skipped', reason: 'no_tokens' };
+  const ctx = await withLifemaxxingCalendar(supabase, userId);
+  if (!ctx.ok) return { status: 'skipped', reason: ctx.reason };
 
   try {
-    const { client, rotated } = await authorizedClient(tokens as any);
-    if (rotated) {
-      await supabase
-        .from('google_tokens')
-        .update({
-          access_token: rotated.access_token,
-          expires_at: rotated.expires_at,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
-    }
-
     const dates = mealPlanWeek();
     const eventIds: string[] = [];
 
@@ -82,12 +63,16 @@ export async function addMealPlanToCalendar(
       const end = osloDateAt(date, 19);
 
       try {
-        const id = await createEvent(client, {
-          summary: `🍳 ${day.title}`,
-          description: buildDescription(day),
-          start,
-          end,
-        });
+        const id = await createEvent(
+          ctx.client,
+          {
+            summary: `🍳 ${day.title}`,
+            description: buildDescription(day),
+            start,
+            end,
+          },
+          ctx.calendarId,
+        );
         eventIds.push(id);
       } catch (err) {
         console.error('[meal-calendar] createEvent failed', date, err);

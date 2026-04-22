@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { TRAINING_GOALS, TRAINING_EQUIPMENT } from '@/lib/prompts';
+import { ensureTrainingHabit } from '@/lib/training-habit';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,10 @@ const bodySchema = z.object({
   location: z.enum(['home', 'gym', 'outdoor', 'mixed']),
   injuries: z.string().trim().max(500).nullable(),
   notes: z.string().trim().max(500).nullable(),
+  training_time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'time must be HH:MM')
+    .default('17:00'),
 });
 
 export async function GET() {
@@ -58,6 +63,12 @@ export async function PUT(request: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Auto-create the linked "Trening" habit if not already present.
+  const habitId = await ensureTrainingHabit(supabase, user.id);
+  if (habitId && (data as any).training_habit_id !== habitId) {
+    (data as any).training_habit_id = habitId;
+  }
 
   return NextResponse.json({ preferences: data });
 }

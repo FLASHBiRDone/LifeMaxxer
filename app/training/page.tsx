@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { osloDayBounds } from '@/lib/time';
 import { TrainingClient } from '@/components/training/training-client';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export default async function TrainingPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: prefs }, { data: planRow }, { data: recentLogs }] = await Promise.all([
+  const [{ data: prefs }, { data: planRow }] = await Promise.all([
     supabase
       .from('training_preferences')
       .select('*')
@@ -23,12 +24,6 @@ export default async function TrainingPage() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from('training_logs')
-      .select('day_index, completed_at')
-      .eq('user_id', user.id)
-      .order('completed_at', { ascending: false })
-      .limit(30),
   ]);
 
   let initialPlan: any = null;
@@ -40,14 +35,31 @@ export default async function TrainingPage() {
     }
   }
 
+  const activePlanId = (prefs as any)?.active_plan_id as string | null;
+  const latestPlanId = (planRow as any)?.id ?? null;
+  const isCommitted = Boolean(activePlanId && latestPlanId === activePlanId);
+
+  const { dateString } = osloDayBounds();
+  let exerciseLogs: Array<{ day_index: number; exercise_index: number }> = [];
+  if (latestPlanId) {
+    const { data: logs } = await supabase
+      .from('training_exercise_logs')
+      .select('day_index, exercise_index')
+      .eq('user_id', user.id)
+      .eq('plan_message_id', latestPlanId)
+      .eq('logged_for', dateString);
+    exerciseLogs = (logs as any[]) ?? [];
+  }
+
   return (
     <main className="container max-w-xl py-6">
       <TrainingClient
         initialPreferences={(prefs as any) ?? null}
         initialPlan={initialPlan}
-        initialPlanId={(planRow as any)?.id ?? null}
+        initialPlanId={latestPlanId}
         initialPlanCreatedAt={(planRow as any)?.created_at ?? null}
-        initialLogs={(recentLogs as any[]) ?? []}
+        initialIsCommitted={isCommitted}
+        initialExerciseLogs={exerciseLogs}
       />
     </main>
   );

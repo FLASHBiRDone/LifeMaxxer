@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { osloDayBounds } from '@/lib/time';
 
 export const runtime = 'nodejs';
 
@@ -29,5 +30,34 @@ export async function POST(request: NextRequest) {
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  // Mirror the completion onto the linked "Trening" habit so it shows up
+  // on the today page / habit grid. Silently skip if nothing to mirror.
+  let habitMirrored = false;
+  const { data: prefs } = await supabase
+    .from('training_preferences')
+    .select('training_habit_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  const habitId = (prefs as any)?.training_habit_id as string | null;
+  if (habitId) {
+    const { dateString } = osloDayBounds();
+    const { data: existing } = await supabase
+      .from('habit_logs')
+      .select('id')
+      .eq('habit_id', habitId)
+      .eq('logged_for', dateString)
+      .maybeSingle();
+    if (!existing) {
+      const { error: habitErr } = await supabase.from('habit_logs').insert({
+        user_id: user.id,
+        habit_id: habitId,
+        logged_for: dateString,
+      });
+      if (!habitErr) habitMirrored = true;
+    } else {
+      habitMirrored = true;
+    }
+  }
+
+  return NextResponse.json({ ok: true, habitMirrored });
 }

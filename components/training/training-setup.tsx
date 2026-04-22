@@ -35,6 +35,7 @@ export type TrainingPreferences = {
   location: 'home' | 'gym' | 'outdoor' | 'mixed';
   injuries: string | null;
   notes: string | null;
+  training_time: string; // HH:MM
 };
 
 type GoalOption = {
@@ -117,6 +118,7 @@ export function TrainingSetup({
       location: 'home',
       injuries: null,
       notes: null,
+      training_time: '17:00',
     },
   );
 
@@ -263,6 +265,25 @@ export function TrainingSetup({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium inline-flex items-center gap-2">
+                <Timer className="h-4 w-4 text-primary" /> Tidspunkt
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                Brukes på kalender-hendelser
+              </span>
+            </div>
+            <Input
+              type="time"
+              value={prefs.training_time}
+              onChange={(e) =>
+                setPrefs((p) => ({ ...p, training_time: e.target.value || '17:00' }))
+              }
+              className="w-full"
+            />
           </div>
         </div>
       ),

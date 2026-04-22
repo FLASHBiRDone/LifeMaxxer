@@ -120,10 +120,11 @@ export type NewCalendarEvent = {
 export async function createEvent(
   auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
   event: NewCalendarEvent,
+  calendarId: string = 'primary',
 ): Promise<string> {
   const calendar = google.calendar({ version: 'v3', auth });
   const res = await calendar.events.insert({
-    calendarId: 'primary',
+    calendarId,
     requestBody: {
       summary: event.summary,
       description: event.description,
@@ -137,6 +138,54 @@ export async function createEvent(
     },
   });
   return res.data.id!;
+}
+
+const LIFEMAXXING_CAL_NAME = 'LifeMaxxing';
+const LIFEMAXXING_CAL_DESC = 'Automatisk lagde hendelser fra LifeMaxxer';
+
+/**
+ * Return the calendar id for the user's "LifeMaxxing" calendar. Creates
+ * it once if it doesn't exist. Reads/writes a cached id from the caller-
+ * supplied getStored callback so we don't list calendars on every event.
+ */
+export async function getOrCreateLifemaxxingCalendar(
+  auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
+  cached: string | null,
+): Promise<{ id: string; rotated: boolean }> {
+  if (cached) return { id: cached, rotated: false };
+
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  // Look for an existing calendar with the name (user may have created
+  // it manually or we may have just not stored the id yet).
+  const list = await calendar.calendarList.list({ maxResults: 250 });
+  const existing = (list.data.items ?? []).find(
+    (c) => c.summary === LIFEMAXXING_CAL_NAME,
+  );
+  if (existing?.id) return { id: existing.id, rotated: true };
+
+  // Create a new calendar dedicated to LifeMaxxer events.
+  const created = await calendar.calendars.insert({
+    requestBody: {
+      summary: LIFEMAXXING_CAL_NAME,
+      description: LIFEMAXXING_CAL_DESC,
+      timeZone: 'Europe/Oslo',
+    },
+  });
+  const id = created.data.id;
+  if (!id) throw new Error('kunne ikke opprette LifeMaxxing-kalenderen');
+
+  // Give the new calendar a teal color that matches the app theme.
+  try {
+    await calendar.calendarList.patch({
+      calendarId: id,
+      requestBody: { colorId: '7' }, // Google calendar "Peacock" — a teal-ish blue
+    });
+  } catch {
+    /* non-critical */
+  }
+
+  return { id, rotated: true };
 }
 
 export type EventPatch = {

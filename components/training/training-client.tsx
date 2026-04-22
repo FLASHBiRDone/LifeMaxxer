@@ -3,6 +3,9 @@
 import { useMemo, useState } from 'react';
 import {
   Activity,
+  CalendarCheck,
+  CalendarPlus,
+  Check,
   ChevronDown,
   Clock,
   Coffee,
@@ -12,9 +15,8 @@ import {
   Move,
   RefreshCw,
   Settings2,
-  Sparkles,
-  Check,
   ShieldAlert,
+  Sparkles,
   TrendingUp,
   Zap,
 } from 'lucide-react';
@@ -27,10 +29,7 @@ import type {
 } from '@/lib/prompts';
 import { TrainingSetup, type TrainingPreferences } from './training-setup';
 
-type Log = {
-  day_index: number;
-  completed_at: string;
-};
+type ExerciseKey = `${number}-${number}`; // dayIndex-exerciseIndex
 
 const TYPE_ICON: Record<TrainingDay['type'], React.ComponentType<{ className?: string }>> = {
   strength: Dumbbell,
@@ -61,42 +60,63 @@ export function TrainingClient({
   initialPlan,
   initialPlanId,
   initialPlanCreatedAt,
-  initialLogs,
+  initialIsCommitted,
+  initialExerciseLogs,
 }: {
   initialPreferences: TrainingPreferences | null;
   initialPlan: TrainingPlanOutput | null;
   initialPlanId: string | null;
   initialPlanCreatedAt: string | null;
-  initialLogs: Log[];
+  initialIsCommitted: boolean;
+  initialExerciseLogs: Array<{ day_index: number; exercise_index: number }>;
 }) {
   const [preferences, setPreferences] = useState<TrainingPreferences | null>(initialPreferences);
   const [plan, setPlan] = useState<TrainingPlanOutput | null>(initialPlan);
   const [planId, setPlanId] = useState<string | null>(initialPlanId);
   const [planCreatedAt, setPlanCreatedAt] = useState<string | null>(initialPlanCreatedAt);
-  const [logs, setLogs] = useState<Log[]>(initialLogs);
+  const [isCommitted, setIsCommitted] = useState(initialIsCommitted);
+  const [completedMap, setCompletedMap] = useState<Set<ExerciseKey>>(
+    () => new Set(initialExerciseLogs.map((l) => `${l.day_index}-${l.exercise_index}` as ExerciseKey)),
+  );
   const [showSetup, setShowSetup] = useState(!initialPreferences);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<number | null>(null);
-  const [logging, setLogging] = useState<number | null>(null);
+  const [togglingKey, setTogglingKey] = useState<ExerciseKey | null>(null);
+  const [calendarStatus, setCalendarStatus] = useState<
+    | { kind: 'added'; count: number }
+    | { kind: 'no_tokens' }
+    | { kind: 'error'; message: string }
+    | null
+  >(null);
 
-  // Keyed "YYYY-MM-DD" → doneTodayDayIndexSet (so we highlight done-today)
-  const doneToday = useMemo(() => {
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    const set = new Set<number>();
-    for (const l of logs) {
-      if (l.completed_at.slice(0, 10) === todayStr) set.add(l.day_index);
-    }
-    return set;
-  }, [logs]);
+  const todayIndex = useMemo(() => {
+    const d = new Date().getDay(); // 0=Sun..6=Sat
+    return d === 0 ? 6 : d - 1;
+  }, []);
 
-  const weeklyCount = useMemo(() => {
-    // Completed in last 7 days
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return logs.filter((l) => new Date(l.completed_at).getTime() >= cutoff).length;
-  }, [logs]);
+  const weeklyStats = useMemo(() => {
+    if (!plan) return { done: 0, total: 0, percent: 0 };
+    const total = plan.days
+      .map((d) => d.exercises.length)
+      .reduce((a, b) => a + b, 0);
+    const done = completedMap.size;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, total, percent };
+  }, [plan, completedMap]);
+
+  function dayStats(dayIndex: number, dayExercises: TrainingExercise[]) {
+    const total = dayExercises.length;
+    const done = dayExercises.reduce(
+      (acc, _, exIdx) =>
+        acc + (completedMap.has(`${dayIndex}-${exIdx}` as ExerciseKey) ? 1 : 0),
+      0,
+    );
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, total, percent };
+  }
 
   async function savePreferences(prefs: TrainingPreferences) {
     setSavingPrefs(true);
@@ -113,7 +133,7 @@ export function TrainingClient({
       }
       setPreferences(prefs);
       setShowSetup(false);
-      // Auto-generate first plan right after saving preferences
+      // Immediately generate the first plan after saving preferences
       await generatePlan();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
@@ -125,6 +145,7 @@ export function TrainingClient({
   async function generatePlan() {
     setGenerating(true);
     setError(null);
+    setCalendarStatus(null);
     try {
       const res = await fetch('/api/training/plan', { method: 'POST' });
       if (!res.ok) {
@@ -135,6 +156,8 @@ export function TrainingClient({
       setPlan(p);
       setPlanId(messageId);
       setPlanCreatedAt(createdAt);
+      setIsCommitted(false);
+      setCompletedMap(new Set());
       setOpenDay(0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
@@ -143,47 +166,79 @@ export function TrainingClient({
     }
   }
 
-  async function logSession(dayIndex: number) {
-    if (logging !== null) return;
-    setLogging(dayIndex);
+  async function commitPlan() {
+    if (!planId) return;
+    setCommitting(true);
+    setError(null);
     try {
-      const res = await fetch('/api/training/log', {
+      const res = await fetch('/api/training/plan/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planMessageId: planId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Kunne ikke forplikte plan');
+      }
+      const { calendar } = await res.json();
+      setIsCommitted(true);
+      if (calendar?.status === 'added') {
+        setCalendarStatus({ kind: 'added', count: calendar.created });
+      } else if (calendar?.status === 'skipped' && calendar.reason === 'no_tokens') {
+        setCalendarStatus({ kind: 'no_tokens' });
+      } else if (calendar?.status === 'error') {
+        setCalendarStatus({ kind: 'error', message: calendar.message });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  async function toggleExercise(dayIndex: number, exerciseIndex: number) {
+    if (!planId) return;
+    const key = `${dayIndex}-${exerciseIndex}` as ExerciseKey;
+    if (togglingKey === key) return;
+
+    // Optimistic update
+    const wasDone = completedMap.has(key);
+    setCompletedMap((prev) => {
+      const next = new Set(prev);
+      if (wasDone) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setTogglingKey(key);
+
+    try {
+      const res = await fetch('/api/training/exercise-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planMessageId: planId,
           dayIndex,
-          notes: null,
+          exerciseIndex,
         }),
       });
-      if (res.ok) {
-        setLogs((prev) => [
-          { day_index: dayIndex, completed_at: new Date().toISOString() },
-          ...prev,
-        ]);
+      if (!res.ok) {
+        // Roll back
+        setCompletedMap((prev) => {
+          const next = new Set(prev);
+          if (wasDone) next.add(key);
+          else next.delete(key);
+          return next;
+        });
       }
     } finally {
-      setLogging(null);
+      setTogglingKey(null);
     }
   }
 
   if (showSetup) {
     return (
       <div className="space-y-5">
-        <header className="rounded-3xl grad-hero border p-5 flex items-start gap-4 soft-shadow">
-          <div className="h-12 w-12 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 soft-shadow">
-            <Dumbbell className="h-6 w-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
-              Trening
-            </p>
-            <h1 className="text-2xl font-bold">Sett opp programmet</h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              5 korte spørsmål – vi lager en plan tilpasset deg
-            </p>
-          </div>
-        </header>
+        <Header subtitle="5 korte spørsmål – vi lager en plan tilpasset deg" />
         <TrainingSetup
           initial={preferences}
           onSubmit={savePreferences}
@@ -197,62 +252,28 @@ export function TrainingClient({
 
   return (
     <div className="space-y-5">
-      <header className="rounded-3xl grad-hero border p-5 flex items-start gap-4 soft-shadow">
-        <div className="h-12 w-12 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 soft-shadow">
-          <Dumbbell className="h-6 w-6" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
-            Trening
-          </p>
-          <h1 className="text-2xl font-bold">Ukens program</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {plan
-              ? `${plan.days.filter((d) => d.type !== 'rest').length} treningsøkter`
-              : 'Ingen plan ennå'}
-          </p>
-          {plan && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 tabular">
-              {weeklyCount} fullført denne uken
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowSetup(true)}
-          className="h-9 w-9 rounded-xl border bg-card hover:border-primary/40 transition-colors flex items-center justify-center flex-shrink-0"
-          aria-label="Endre preferanser"
-        >
-          <Settings2 className="h-4 w-4" />
-        </button>
-      </header>
-
-      {!plan && (
-        <div className="rounded-3xl border bg-card p-8 text-center space-y-3 soft-shadow">
-          <div className="mx-auto h-12 w-12 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <p className="text-sm font-semibold">Klar for første plan?</p>
-          <p className="text-xs text-muted-foreground">
-            AI lager et program ut fra preferansene du nettopp satte.
-          </p>
-          <Button
-            type="button"
-            onClick={generatePlan}
-            disabled={generating}
-            className="grad-primary text-primary-foreground border-transparent"
-          >
-            {generating ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lager…</>
-            ) : (
-              <><Sparkles className="h-4 w-4 mr-2" /> Lag plan</>
-            )}
-          </Button>
-        </div>
-      )}
+      <Header
+        subtitle={
+          plan
+            ? isCommitted
+              ? `Aktiv plan · ${weeklyStats.done}/${weeklyStats.total} øvelser (${weeklyStats.percent}%)`
+              : 'Forhåndsvisning – ikke forpliktet ennå'
+            : 'Ingen plan ennå'
+        }
+        onEditSettings={() => setShowSetup(true)}
+      />
 
       {plan && (
         <>
+          {/* Weekly progress ring + meta */}
+          {isCommitted && weeklyStats.total > 0 && (
+            <WeeklyProgress
+              done={weeklyStats.done}
+              total={weeklyStats.total}
+              percent={weeklyStats.percent}
+            />
+          )}
+
           <section className="rounded-2xl border bg-card p-4 space-y-2 soft-shadow">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5" /> Oversikt
@@ -262,6 +283,51 @@ export function TrainingClient({
               Anbefalt varighet: {plan.weeksSuggested} uker
             </p>
           </section>
+
+          {!isCommitted && (
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">Klar til å forplikte seg?</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Forplikt deg for å legge øktene i LifeMaxxing-kalenderen
+                    og koble vanen «Trening» til øvelsene.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={commitPlan}
+                disabled={committing}
+                className="w-full grad-primary text-primary-foreground border-transparent"
+              >
+                {committing ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Forplikter…</>
+                ) : (
+                  <><Check className="h-4 w-4 mr-2" /> Forplikt meg til denne planen</>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {isCommitted && calendarStatus?.kind === 'added' && (
+            <div className="rounded-2xl border bg-card p-3 text-sm text-muted-foreground inline-flex items-center gap-2 soft-shadow">
+              <CalendarCheck className="h-4 w-4 text-primary" />
+              Lagt til {calendarStatus.count} økter i LifeMaxxing-kalenderen
+            </div>
+          )}
+          {isCommitted && calendarStatus?.kind === 'no_tokens' && (
+            <p className="text-xs text-muted-foreground px-1">
+              Koble til Google Kalender i{' '}
+              <a href="/settings" className="underline text-primary">
+                Innstillinger
+              </a>{' '}
+              for å se øktene på LifeMaxxing-kalenderen.
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button
@@ -286,13 +352,15 @@ export function TrainingClient({
               const isOpen = openDay === idx;
               const Icon = TYPE_ICON[d.type];
               const isRest = d.type === 'rest';
-              const completedToday = doneToday.has(idx);
+              const isToday = idx === todayIndex;
+              const stats = dayStats(idx, d.exercises);
               return (
                 <li
                   key={idx}
                   className={cn(
                     'rounded-2xl border overflow-hidden soft-shadow transition-colors',
                     isRest ? 'bg-muted/40 border-border/60' : 'bg-card',
+                    isToday && 'ring-1 ring-primary/40',
                   )}
                 >
                   <button
@@ -311,19 +379,22 @@ export function TrainingClient({
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold truncate">
-                          {d.day}
-                          <span className="text-muted-foreground font-normal">
-                            {' · '}
-                            {d.title}
+                      <p className="text-sm font-semibold truncate">
+                        {d.day}
+                        {isToday && (
+                          <span className="ml-2 text-[10px] uppercase tracking-widest text-primary font-bold">
+                            i dag
                           </span>
-                        </p>
-                      </div>
+                        )}
+                        <span className="text-muted-foreground font-normal">
+                          {' · '}
+                          {d.title}
+                        </span>
+                      </p>
                       <p className="text-[11px] text-muted-foreground line-clamp-1">
                         {d.focus}
                       </p>
-                      <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                         <span className="uppercase tracking-wider font-semibold text-primary/80">
                           {TYPE_LABEL[d.type]}
                         </span>
@@ -332,9 +403,14 @@ export function TrainingClient({
                             <Clock className="h-3 w-3" /> {d.duration} min
                           </span>
                         )}
-                        {completedToday && (
-                          <span className="inline-flex items-center gap-1 text-primary font-semibold">
-                            <Check className="h-3 w-3" /> Fullført
+                        {!isRest && stats.total > 0 && isCommitted && (
+                          <span
+                            className={cn(
+                              'font-semibold tabular',
+                              stats.percent === 100 ? 'text-primary' : 'text-muted-foreground',
+                            )}
+                          >
+                            {stats.done}/{stats.total} · {stats.percent}%
                           </span>
                         )}
                       </div>
@@ -363,11 +439,33 @@ export function TrainingClient({
 
                       {d.exercises.length > 0 && (
                         <ExpandSection label="Øvelser">
-                          <ul className="space-y-2">
-                            {d.exercises.map((ex, i) => (
-                              <ExerciseRow key={i} exercise={ex} />
-                            ))}
+                          {isCommitted && stats.total > 0 && (
+                            <ProgressBar percent={stats.percent} />
+                          )}
+                          <ul className="space-y-2 mt-3">
+                            {d.exercises.map((ex, i) => {
+                              const key = `${idx}-${i}` as ExerciseKey;
+                              const done = completedMap.has(key);
+                              return (
+                                <ExerciseRow
+                                  key={i}
+                                  exercise={ex}
+                                  done={done}
+                                  toggling={togglingKey === key}
+                                  onToggle={
+                                    isCommitted
+                                      ? () => toggleExercise(idx, i)
+                                      : undefined
+                                  }
+                                />
+                              );
+                            })}
                           </ul>
+                          {!isCommitted && (
+                            <p className="text-[11px] text-muted-foreground mt-3">
+                              Forplikt deg til planen for å kunne krysse av øvelser.
+                            </p>
+                          )}
                         </ExpandSection>
                       )}
 
@@ -382,26 +480,6 @@ export function TrainingClient({
                           </ul>
                         </ExpandSection>
                       )}
-
-                      <Button
-                        type="button"
-                        onClick={() => logSession(idx)}
-                        disabled={logging === idx || completedToday}
-                        className={cn(
-                          'w-full border-transparent',
-                          completedToday
-                            ? 'bg-muted text-muted-foreground'
-                            : 'grad-primary text-primary-foreground',
-                        )}
-                      >
-                        {logging === idx ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : completedToday ? (
-                          <><Check className="h-4 w-4 mr-1.5" /> Fullført i dag</>
-                        ) : (
-                          <><Check className="h-4 w-4 mr-1.5" /> Marker som fullført</>
-                        )}
-                      </Button>
                     </div>
                   )}
                 </li>
@@ -416,9 +494,7 @@ export function TrainingClient({
               </p>
               <ul className="space-y-1 text-sm">
                 {plan.progressionTips.map((t, i) => (
-                  <li key={i} className="leading-relaxed">
-                    • {t}
-                  </li>
+                  <li key={i} className="leading-relaxed">• {t}</li>
                 ))}
               </ul>
             </section>
@@ -431,9 +507,7 @@ export function TrainingClient({
               </p>
               <ul className="space-y-1 text-sm">
                 {plan.safetyNotes.map((t, i) => (
-                  <li key={i} className="leading-relaxed">
-                    • {t}
-                  </li>
+                  <li key={i} className="leading-relaxed">• {t}</li>
                 ))}
               </ul>
             </section>
@@ -452,6 +526,135 @@ export function TrainingClient({
           )}
         </>
       )}
+
+      {!plan && (
+        <div className="rounded-3xl border bg-card p-8 text-center space-y-3 soft-shadow">
+          <div className="mx-auto h-12 w-12 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-semibold">Klar for første plan?</p>
+          <Button
+            type="button"
+            onClick={generatePlan}
+            disabled={generating}
+            className="grad-primary text-primary-foreground border-transparent"
+          >
+            {generating ? (
+              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lager…</>
+            ) : (
+              <><Sparkles className="h-4 w-4 mr-2" /> Lag plan</>
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({
+  subtitle,
+  onEditSettings,
+}: {
+  subtitle: string;
+  onEditSettings?: () => void;
+}) {
+  return (
+    <header className="rounded-3xl grad-hero border p-5 flex items-start gap-4 soft-shadow">
+      <div className="h-12 w-12 rounded-2xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0 soft-shadow">
+        <Dumbbell className="h-6 w-6" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
+          Trening
+        </p>
+        <h1 className="text-2xl font-bold">Ukens program</h1>
+        <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+      </div>
+      {onEditSettings && (
+        <button
+          type="button"
+          onClick={onEditSettings}
+          className="h-9 w-9 rounded-xl border bg-card hover:border-primary/40 transition-colors flex items-center justify-center flex-shrink-0"
+          aria-label="Endre preferanser"
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+      )}
+    </header>
+  );
+}
+
+function WeeklyProgress({
+  done,
+  total,
+  percent,
+}: {
+  done: number;
+  total: number;
+  percent: number;
+}) {
+  const circumference = 2 * Math.PI * 28;
+  const dashOffset = circumference * (1 - percent / 100);
+  return (
+    <section className="rounded-2xl border bg-card p-5 flex items-center gap-4 soft-shadow">
+      <div className="relative h-16 w-16 flex-shrink-0">
+        <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
+          <circle
+            cx="32"
+            cy="32"
+            r="28"
+            fill="none"
+            stroke="hsl(var(--muted))"
+            strokeWidth="5"
+          />
+          <circle
+            cx="32"
+            cy="32"
+            r="28"
+            fill="none"
+            stroke="url(#gradRing)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{ transition: 'stroke-dashoffset 240ms cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+          />
+          <defs>
+            <linearGradient id="gradRing" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="hsl(var(--grad-a))" />
+              <stop offset="100%" stopColor="hsl(var(--grad-b))" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-base font-bold tabular">{percent}%</span>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Ukens fremgang
+        </p>
+        <p className="text-sm mt-0.5">
+          <span className="font-bold tabular">{done}</span>
+          <span className="text-muted-foreground"> / </span>
+          <span className="font-semibold tabular">{total}</span>
+          <span className="text-muted-foreground"> øvelser</span>
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          Synkes med vanen «Trening»
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+      <div
+        className="h-full grad-primary transition-all duration-300"
+        style={{ width: `${percent}%` }}
+      />
     </div>
   );
 }
@@ -473,12 +676,56 @@ function ExpandSection({
   );
 }
 
-function ExerciseRow({ exercise }: { exercise: TrainingExercise }) {
+function ExerciseRow({
+  exercise,
+  done,
+  toggling,
+  onToggle,
+}: {
+  exercise: TrainingExercise;
+  done: boolean;
+  toggling: boolean;
+  onToggle?: () => void;
+}) {
+  const interactive = Boolean(onToggle);
+  const Element = (interactive ? 'button' : 'div') as React.ElementType;
   return (
-    <li className="rounded-xl border bg-background px-3 py-2.5">
-      <div className="flex items-center gap-3">
+    <li>
+      <Element
+        type={interactive ? 'button' : undefined}
+        onClick={onToggle}
+        disabled={toggling}
+        className={cn(
+          'w-full rounded-xl border bg-background px-3 py-2.5 flex items-center gap-3 text-left transition-colors',
+          interactive && 'hover:border-primary/40 card-hover',
+          done && 'bg-primary/5 border-primary/30',
+        )}
+      >
+        <span
+          className={cn(
+            'h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
+            done
+              ? 'grad-primary border-transparent text-primary-foreground'
+              : 'border-muted-foreground/40',
+            !interactive && 'opacity-40',
+          )}
+          aria-hidden
+        >
+          {toggling ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : done ? (
+            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+          ) : null}
+        </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">{exercise.name}</p>
+          <p
+            className={cn(
+              'text-sm font-semibold truncate',
+              done && 'line-through text-muted-foreground',
+            )}
+          >
+            {exercise.name}
+          </p>
           {exercise.notes && (
             <p className="text-[11px] text-muted-foreground line-clamp-1">
               {exercise.notes}
@@ -493,7 +740,7 @@ function ExerciseRow({ exercise }: { exercise: TrainingExercise }) {
             pause {restLabel(exercise.restSeconds)}
           </p>
         </div>
-      </div>
+      </Element>
     </li>
   );
 }
