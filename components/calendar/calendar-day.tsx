@@ -1,11 +1,13 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, Plus, RefreshCw, ExternalLink } from 'lucide-react';
+import { CalendarDays, Plus, RefreshCw, ExternalLink, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { NewEventDialog } from './new-event-dialog';
+import { DayCarousel } from './day-carousel';
 import { cn } from '@/lib/cn';
 
 type CalEvent = {
@@ -60,12 +62,14 @@ function longDate(dateString: string): string {
 
 export function CalendarDay({
   dateString,
+  todayString,
   connected,
   events,
   quests,
   syncError,
 }: {
   dateString: string;
+  todayString: string;
   connected: boolean;
   events: CalEvent[];
   quests: Quest[];
@@ -118,6 +122,8 @@ export function CalendarDay({
     });
   }
 
+  const isToday = dateString === todayString;
+
   return (
     <div className="space-y-6">
       <header className="rounded-3xl grad-hero border p-5 flex items-start gap-4">
@@ -133,10 +139,23 @@ export function CalendarDay({
             {events.length} hendelser · {quests.length} oppdrag
           </p>
         </div>
+        {!isToday && (
+          <Link
+            href="/calendar"
+            scroll={false}
+            className="inline-flex items-center gap-1.5 rounded-xl border bg-card px-3 py-1.5 text-xs font-semibold hover:border-primary/40 transition-colors"
+            title="Hopp til i dag"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            I dag
+          </Link>
+        )}
         <Button variant="ghost" size="icon" onClick={sync} disabled={syncing || !connected} title="Synk">
           <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
         </Button>
       </header>
+
+      <DayCarousel dateString={dateString} todayString={todayString} />
 
       {!connected && (
         <div className="rounded-2xl border bg-card p-4 text-sm space-y-2">
