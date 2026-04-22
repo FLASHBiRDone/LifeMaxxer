@@ -8,6 +8,7 @@ import { EnergyCheckIn } from '@/components/today/energy';
 import { RunBriefingButton } from '@/components/today/run-briefing';
 import { WeekHabitGrid } from '@/components/today/week-habit-grid';
 import { TodayHero } from '@/components/today/hero';
+import { TodayShortcuts } from '@/components/today/shortcuts';
 
 export const dynamic = 'force-dynamic';
 
@@ -195,6 +196,8 @@ export default async function TodayPage() {
         weekHabitsDone={weekHabitsDone}
         weekHabitsTotal={weekHabitsTotal}
       />
+
+      <TodayShortcuts />
 
       <TodayQuests quests={questsList} />
 

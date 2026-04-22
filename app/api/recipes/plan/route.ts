@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { generateMealPlan } from '@/lib/meal-plan';
+import { addMealPlanToCalendar } from '@/lib/meal-calendar';
 import { ALLERGENS } from '@/lib/allergens';
 
 export const runtime = 'nodejs';
@@ -57,7 +58,9 @@ export async function POST(request: NextRequest) {
       cost_usd: result.costUsd,
     });
 
-    return NextResponse.json({ plan: record });
+    const calendar = await addMealPlanToCalendar(supabase, user.id, record);
+
+    return NextResponse.json({ plan: record, calendar });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

@@ -11,6 +11,8 @@ import {
   Loader2,
   RefreshCw,
   Check,
+  CalendarPlus,
+  CalendarCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,6 +74,13 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
   const [generating, setGenerating] = useState(false);
   const [addingToShopping, setAddingToShopping] = useState(false);
   const [addedToShopping, setAddedToShopping] = useState(false);
+  const [addingToCalendar, setAddingToCalendar] = useState(false);
+  const [calendarStatus, setCalendarStatus] = useState<
+    | { kind: 'added'; count: number }
+    | { kind: 'no_tokens' }
+    | { kind: 'error'; message: string }
+    | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [openDay, setOpenDay] = useState<number | null>(null);
 
@@ -84,6 +93,7 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
     setGenerating(true);
     setError(null);
     setAddedToShopping(false);
+    setCalendarStatus(null);
     try {
       const res = await fetch('/api/recipes/plan', {
         method: 'POST',
@@ -94,13 +104,40 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? 'Kunne ikke lage planen');
       }
-      const { plan: p } = await res.json();
+      const { plan: p, calendar } = await res.json();
       setPlan(p);
       setOpenDay(0);
+      if (calendar?.status === 'added') {
+        setCalendarStatus({ kind: 'added', count: calendar.created });
+      } else if (calendar?.status === 'skipped' && calendar.reason === 'no_tokens') {
+        setCalendarStatus({ kind: 'no_tokens' });
+      } else if (calendar?.status === 'error') {
+        setCalendarStatus({ kind: 'error', message: calendar.message });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function addToCalendar() {
+    setAddingToCalendar(true);
+    try {
+      const res = await fetch('/api/recipes/plan/add-to-calendar', {
+        method: 'POST',
+      });
+      const body = await res.json().catch(() => ({}));
+      const c = body.calendar;
+      if (c?.status === 'added') {
+        setCalendarStatus({ kind: 'added', count: c.created });
+      } else if (c?.status === 'skipped' && c.reason === 'no_tokens') {
+        setCalendarStatus({ kind: 'no_tokens' });
+      } else if (c?.status === 'error') {
+        setCalendarStatus({ kind: 'error', message: c.message });
+      }
+    } finally {
+      setAddingToCalendar(false);
     }
   }
 
@@ -232,11 +269,10 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
 
       {plan && (
         <>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
               onClick={addAllToShopping}
               disabled={addingToShopping}
             >
@@ -245,10 +281,39 @@ export function RecipesClient({ initialPlan }: { initialPlan: MealPlan | null })
               ) : addedToShopping ? (
                 <><Check className="h-4 w-4 mr-2" /> Lagt til</>
               ) : (
-                <><ShoppingBasket className="h-4 w-4 mr-2" /> Alle ingredienser til handleliste</>
+                <><ShoppingBasket className="h-4 w-4 mr-2" /> Handleliste</>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addToCalendar}
+              disabled={addingToCalendar}
+            >
+              {addingToCalendar ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Legger til…</>
+              ) : calendarStatus?.kind === 'added' ? (
+                <><CalendarCheck className="h-4 w-4 mr-2" /> I kalender · {calendarStatus.count}</>
+              ) : (
+                <><CalendarPlus className="h-4 w-4 mr-2" /> Kalender 18:00</>
               )}
             </Button>
           </div>
+
+          {calendarStatus?.kind === 'no_tokens' && (
+            <p className="text-xs text-muted-foreground px-1">
+              Koble til Google Kalender i{' '}
+              <a href="/settings" className="underline text-primary">
+                Innstillinger
+              </a>{' '}
+              for å legge middagene inn automatisk.
+            </p>
+          )}
+          {calendarStatus?.kind === 'error' && (
+            <p className="text-xs text-destructive px-1">
+              Kalenderfeil: {calendarStatus.message}
+            </p>
+          )}
 
           <ul className="space-y-3">
             {plan.days.map((d, idx) => {

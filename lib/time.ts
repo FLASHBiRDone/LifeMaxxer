@@ -36,3 +36,35 @@ export function osloWeekDays(reference: Date = new Date(), tz = OSLO) {
     };
   });
 }
+
+/**
+ * Build a UTC Date for a specific Oslo wall-clock time on a yyyy-MM-dd date.
+ * DST-safe via date-fns-tz.
+ */
+export function osloDateAt(
+  dateString: string,
+  hour: number,
+  minute = 0,
+  tz = OSLO,
+): Date {
+  const [y, mo, d] = dateString.split('-').map(Number);
+  return fromZonedTime(new Date(y, mo - 1, d, hour, minute, 0, 0), tz);
+}
+
+/**
+ * The 7-day window a newly-generated meal plan should be scheduled over.
+ * Mon–Wed: use this week's Mon–Sun. Thu–Sun: use next week's Mon–Sun.
+ * Always returns 7 consecutive days starting on a Monday.
+ */
+export function mealPlanWeek(reference: Date = new Date(), tz = OSLO) {
+  const zoned = toZonedTime(reference, tz);
+  const dow = zoned.getDay(); // 0=Sun, 1=Mon..6=Sat
+  const daysFromMonday = dow === 0 ? 6 : dow - 1;
+  const useNextWeek = dow === 0 || dow >= 4;
+  const startOffset = useNextWeek ? 7 - daysFromMonday : -daysFromMonday;
+  return Array.from({ length: 7 }, (_, i) => {
+    const shifted = new Date(zoned);
+    shifted.setDate(zoned.getDate() + startOffset + i);
+    return format(shifted, 'yyyy-MM-dd');
+  });
+}
