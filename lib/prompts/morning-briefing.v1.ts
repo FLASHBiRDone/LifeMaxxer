@@ -1,5 +1,14 @@
 import { MODELS } from '@/lib/claude';
 
+export type WeatherForMorning = {
+  city: string | null;
+  tempMin: number;
+  tempMax: number;
+  precipitationMm: number;
+  windMaxKmh: number;
+  conditionLabel: string;
+};
+
 export type MorningContext = {
   date: string;
   dayOfWeek: string;
@@ -7,6 +16,11 @@ export type MorningContext = {
   manaLevel?: 'low' | 'medium' | 'high' | null;
   events: { start: string; title: string }[];
   pendingHabits: string[];
+  // Added for the richer agenda-style briefing:
+  dinner?: { title: string; description?: string } | null;
+  workout?: { title: string; type: string; duration: number } | null;
+  openTasks?: { title: string; bountyXp: number; bountyTokens: number }[];
+  weather?: WeatherForMorning | null;
 };
 
 export const MORNING_BRIEFING_V1 = {
@@ -19,32 +33,95 @@ ABSOLUTE RULES:
 - Never reference things they didn't do yesterday.
 - Never use more than 2 emoji in a response. Preferably zero.
 - Never use exclamation marks more than once.
-- Max 80 words total.
 - If the calendar is empty, celebrate that as a gift, not a problem.
 - If energy is "low," pick ONE thing, not three.
 - If energy is "high," offer up to three, but never more.
 - Write in the user's locale.
 - The user has agency. You suggest; you do not command.
 
-OUTPUT FORMAT (strict JSON):
+CONTENT RULES:
+- intro: one warm sentence, max 18 words.
+- summary: 2–4 short sentences painting the day — mention the biggest
+  calendar event, the dinner plan if any, the workout if any, and a
+  weather-aware clothing hint. Under 60 words total.
+- clothing: ONE concrete, practical line about what to wear given the
+  forecast (e.g. "Regnjakke og sko du ikke syns synd på"). Empty string
+  if no weather data is available.
+- quests: 1–3 main quests for today, each with a short "why".
+
+OUTPUT FORMAT (strict JSON, no preamble, no trailing text):
 {
-  "intro": "one warm sentence, max 15 words",
+  "intro": "string",
+  "summary": "string",
+  "clothing": "string",
   "quests": [
-    { "title": "string", "why": "one short reason it matters today, max 12 words" }
+    { "title": "string", "why": "short reason it matters today, max 12 words" }
   ]
 }`,
-  buildUser: (ctx: MorningContext) =>
-    `Today is ${ctx.date} (${ctx.dayOfWeek}).
+  buildUser: (ctx: MorningContext) => {
+    const eventsBlock =
+      ctx.events.length > 0
+        ? ctx.events.map((e) => `- ${e.start} ${e.title}`).join('\n')
+        : '(none)';
+    const habitsBlock = ctx.pendingHabits.join(', ') || '(none)';
+    const dinnerBlock = ctx.dinner
+      ? `- ${ctx.dinner.title}${ctx.dinner.description ? ` (${ctx.dinner.description})` : ''}`
+      : '(no meal planned)';
+    const workoutBlock = ctx.workout
+      ? `- ${ctx.workout.type}: ${ctx.workout.title} (${ctx.workout.duration} min)`
+      : '(no workout planned)';
+    const tasksBlock =
+      ctx.openTasks && ctx.openTasks.length > 0
+        ? ctx.openTasks
+            .slice(0, 5)
+            .map(
+              (t) =>
+                `- ${t.title} (${[
+                  t.bountyXp > 0 ? `${t.bountyXp} XP` : null,
+                  t.bountyTokens > 0 ? `${t.bountyTokens} tokens` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' + ')})`,
+            )
+            .join('\n')
+        : '(none)';
+    const weatherBlock = ctx.weather
+      ? `- Location: ${ctx.weather.city ?? 'ukjent'}
+- Condition: ${ctx.weather.conditionLabel}
+- Temperature: ${ctx.weather.tempMin}°C to ${ctx.weather.tempMax}°C
+- Precipitation: ${ctx.weather.precipitationMm} mm
+- Wind: up to ${ctx.weather.windMaxKmh} km/h`
+      : '(weather unknown — omit clothing line)';
+
+    return `Today is ${ctx.date} (${ctx.dayOfWeek}).
 Locale: ${ctx.locale}
 Energy level: ${ctx.manaLevel ?? 'not set'}
+
+Weather today:
+${weatherBlock}
+
 Calendar events today:
-${ctx.events.map((e) => `- ${e.start} ${e.title}`).join('\n') || '(none)'}
+${eventsBlock}
+
 Pending habits due today:
-${ctx.pendingHabits.join(', ') || '(none)'}
-`,
+${habitsBlock}
+
+Tonight's dinner (from meal plan, if any):
+${dinnerBlock}
+
+Today's workout (from training plan, if any):
+${workoutBlock}
+
+Open household tasks (marketplace, top 5):
+${tasksBlock}
+
+Write the morning briefing now. Output only the JSON.`;
+  },
 } as const;
 
 export type MorningBriefingOutput = {
   intro: string;
+  summary?: string;
+  clothing?: string;
   quests: { title: string; why: string }[];
 };

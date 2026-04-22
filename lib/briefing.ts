@@ -5,6 +5,8 @@ import type { MorningContext, MorningBriefingOutput } from '@/lib/prompts';
 
 const briefingSchema = z.object({
   intro: z.string().min(1).max(300),
+  summary: z.string().max(600).optional().default(''),
+  clothing: z.string().max(300).optional().default(''),
   quests: z
     .array(
       z.object({
@@ -12,7 +14,8 @@ const briefingSchema = z.object({
         why: z.string().min(1).max(200),
       }),
     )
-    .max(3),
+    .max(3)
+    .default([]),
 });
 
 export type BriefingResult = {
@@ -63,23 +66,54 @@ export async function generateMorningBriefing(
 }
 
 export function fallbackBriefing(ctx: MorningContext): MorningBriefingOutput {
+  const isNb = ctx.locale === 'nb';
+  const weatherLine = ctx.weather
+    ? isNb
+      ? `Været: ${ctx.weather.conditionLabel}, ${ctx.weather.tempMin}–${ctx.weather.tempMax}°C.`
+      : `Weather: ${ctx.weather.conditionLabel}, ${ctx.weather.tempMin}–${ctx.weather.tempMax}°C.`
+    : '';
+  const clothing = ctx.weather
+    ? suggestClothing(ctx.weather, isNb)
+    : '';
   if (ctx.events.length === 0) {
     return {
-      intro:
-        ctx.locale === 'nb'
-          ? 'Kalenderen er åpen. Det er en gave.'
-          : "Your calendar is clear. That's a gift.",
+      intro: isNb ? 'Kalenderen er åpen. Det er en gave.' : "Your calendar is clear. That's a gift.",
+      summary: weatherLine,
+      clothing,
       quests: [],
     };
   }
   return {
-    intro:
-      ctx.locale === 'nb'
-        ? 'Her er det som ligger i dag.'
-        : "Here's what's on today.",
+    intro: isNb ? 'Her er det som ligger i dag.' : "Here's what's on today.",
+    summary: weatherLine,
+    clothing,
     quests: ctx.events.slice(0, 3).map((e) => ({
       title: e.title,
-      why: ctx.locale === 'nb' ? 'fra kalenderen din' : 'from your calendar',
+      why: isNb ? 'fra kalenderen din' : 'from your calendar',
     })),
   };
+}
+
+/** Very rough clothing hint used when the model call is skipped/fails. */
+function suggestClothing(
+  w: NonNullable<MorningContext['weather']>,
+  isNb: boolean,
+): string {
+  const cold = w.tempMax <= 5;
+  const cool = w.tempMax > 5 && w.tempMax <= 15;
+  const warm = w.tempMax > 15 && w.tempMax <= 22;
+  const hot = w.tempMax > 22;
+  const wet = w.precipitationMm >= 1;
+  const windy = w.windMaxKmh >= 30;
+
+  const parts: string[] = [];
+  if (cold) parts.push(isNb ? 'varm jakke' : 'warm coat');
+  else if (cool) parts.push(isNb ? 'jakke og genser' : 'jacket and sweater');
+  else if (warm) parts.push(isNb ? 'genser eller cardigan' : 'sweater or cardigan');
+  else if (hot) parts.push(isNb ? 'lette klær' : 'light clothes');
+  if (wet) parts.push(isNb ? 'regnsikker sko' : 'rain-ready shoes');
+  if (windy) parts.push(isNb ? 'vindtett lag' : 'windproof layer');
+  if (parts.length === 0) return '';
+  const joined = parts.join(isNb ? ', ' : ', ');
+  return isNb ? `Ta på: ${joined}.` : `Wear: ${joined}.`;
 }

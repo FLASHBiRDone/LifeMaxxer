@@ -10,11 +10,14 @@ import { TodayHabits } from '@/components/today/habits';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
 import { TodayPlansPreview } from '@/components/today/plans-preview';
+import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 
 export const dynamic = 'force-dynamic';
 
 type BriefingOutput = {
   intro: string;
+  summary?: string;
+  clothing?: string;
   quests: { title: string; why: string }[];
 };
 
@@ -54,6 +57,7 @@ export default async function TodayPage() {
     { data: mealPlanRow },
     { data: trainingPlanRow },
     { data: trainingPrefs },
+    { data: openTasksRaw },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -101,6 +105,17 @@ export default async function TodayPage() {
       .select('active_plan_id')
       .eq('user_id', user.id)
       .maybeSingle(),
+    householdId
+      ? supabase
+          .from('household_tasks')
+          .select(
+            'id, title, bounty_xp, bounty_tokens, bounty_reward_id, posted_by_user_id',
+          )
+          .eq('household_id', householdId)
+          .eq('status', 'open')
+          .order('created_at', { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
 
   let briefing: BriefingOutput | null = null;
@@ -160,6 +175,39 @@ export default async function TodayPage() {
     };
   });
   const questsDone = questsList.filter((q) => q.completed_at).length;
+
+  // Resolve reward titles for any bounty_reward_id refs in open tasks
+  const openTasksList = ((openTasksRaw as any[]) ?? []).map((t) => ({
+    id: t.id as string,
+    title: t.title as string,
+    bounty_xp: (t.bounty_xp ?? 0) as number,
+    bounty_tokens: (t.bounty_tokens ?? 0) as number,
+    bounty_reward_id: (t.bounty_reward_id ?? null) as string | null,
+    posted_by_user_id: t.posted_by_user_id as string,
+  }));
+  let rewardLabelById: Record<string, string> = {};
+  const rewardIds = openTasksList
+    .map((t) => t.bounty_reward_id)
+    .filter((x): x is string => Boolean(x));
+  if (rewardIds.length > 0) {
+    const { data: rewardRows } = await supabase
+      .from('rewards')
+      .select('id, title, emoji')
+      .in('id', rewardIds);
+    for (const r of ((rewardRows as any[]) ?? [])) {
+      rewardLabelById[r.id] = `${r.emoji ?? '🎁'} ${r.title}`;
+    }
+  }
+  const openTasks: OpenTask[] = openTasksList.map((t) => ({
+    id: t.id,
+    title: t.title,
+    bounty_xp: t.bounty_xp,
+    bounty_tokens: t.bounty_tokens,
+    bounty_reward_label: t.bounty_reward_id
+      ? rewardLabelById[t.bounty_reward_id] ?? 'Belønning'
+      : null,
+    posted_by_user_id: t.posted_by_user_id,
+  }));
 
   const hour = new Date().getHours();
   const showMorningRitual = !mana && hour < 12;
@@ -227,6 +275,17 @@ export default async function TodayPage() {
         energyLevel={(mana as any)?.level as Level | null ?? null}
       />
 
+      {(briefing?.summary || briefing?.clothing) && (
+        <section className="rounded-2xl border bg-card p-4 soft-shadow space-y-2">
+          {briefing.summary && (
+            <p className="text-sm leading-relaxed">{briefing.summary}</p>
+          )}
+          {briefing.clothing && (
+            <p className="text-xs text-muted-foreground">👕 {briefing.clothing}</p>
+          )}
+        </section>
+      )}
+
       <TodayShortcuts />
 
       <TodayPlansPreview
@@ -234,6 +293,8 @@ export default async function TodayPage() {
         workout={todayWorkout}
         people={dinnerPeople}
       />
+
+      <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
 
       <TodayQuests quests={questsList} />
 

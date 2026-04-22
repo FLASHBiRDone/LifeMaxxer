@@ -7,6 +7,7 @@ import { PushToggle } from '@/components/settings/push-toggle';
 import { NotificationPreferences } from '@/components/settings/notification-prefs';
 import { GoogleCalendarCard } from '@/components/settings/google-calendar';
 import { HouseholdCard } from '@/components/settings/household-card';
+import { LocationCard } from '@/components/settings/location-card';
 import { SignOutButton } from '@/components/settings/sign-out';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,7 @@ export default async function SettingsPage({
         .maybeSingle(),
       supabase
         .from('user_profiles')
-        .select('display_name')
+        .select('display_name, city')
         .eq('id', user.id)
         .maybeSingle(),
       supabase
@@ -139,6 +140,7 @@ export default async function SettingsPage({
           invites={householdInvites}
           currentDisplayName={(profile as any)?.display_name ?? null}
         />
+        <LocationCard initialCity={(profile as any)?.city ?? null} />
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
         <NotificationPreferences

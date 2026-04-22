@@ -1,8 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { authorizedClient, listEvents } from '@/lib/google';
-import { osloDayBounds } from '@/lib/time';
+import { osloDayBounds, todayPlanIndex } from '@/lib/time';
 import { generateMorningBriefing, fallbackBriefing } from '@/lib/briefing';
 import { sendPush } from '@/lib/push';
+import { fetchTodayForecast } from '@/lib/weather';
 import type { MorningContext } from '@/lib/prompts';
 
 /**
@@ -17,7 +18,7 @@ export async function runMorningBriefingFor(userId: string) {
     await Promise.all([
       admin
         .from('user_profiles')
-        .select('locale, timezone')
+        .select('locale, timezone, city, latitude, longitude')
         .eq('id', userId)
         .maybeSingle(),
       admin
@@ -34,6 +35,9 @@ export async function runMorningBriefingFor(userId: string) {
 
   const locale = ((profile as any)?.locale ?? 'nb') as 'nb' | 'en';
   const tz = ((profile as any)?.timezone ?? 'Europe/Oslo') as string;
+  const city = (profile as any)?.city as string | null;
+  const lat = (profile as any)?.latitude as number | null;
+  const lon = (profile as any)?.longitude as number | null;
   const { start, end, dateString, dayOfWeek } = osloDayBounds(new Date(), tz);
 
   let events: { start: string; title: string; id: string }[] = [];
@@ -90,6 +94,121 @@ export async function runMorningBriefingFor(userId: string) {
     .maybeSingle();
   const manaLevel = (manaRow as any)?.level ?? null;
 
+  // Today's dinner from the latest meal plan + today's workout from the
+  // active training plan. Both are optional — they're inputs to the
+  // agenda-style summary in the prompt.
+  const [
+    { data: mealPlanRow },
+    { data: trainingPlanRow },
+    { data: trainingPrefs },
+    { data: membership },
+  ] = await Promise.all([
+    admin
+      .from('ai_messages')
+      .select('id, content, created_at')
+      .eq('user_id', userId)
+      .eq('context_type', 'meal_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from('ai_messages')
+      .select('id, content, created_at')
+      .eq('user_id', userId)
+      .eq('context_type', 'training_plan')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from('training_preferences')
+      .select('active_plan_id')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    admin
+      .from('household_members')
+      .select('household_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  let dinner: { title: string; description?: string } | null = null;
+  if ((mealPlanRow as any)?.content) {
+    try {
+      const meal = JSON.parse((mealPlanRow as any).content);
+      const idx = todayPlanIndex(
+        (mealPlanRow as any).created_at,
+        meal.days?.length ?? 0,
+      );
+      if (idx !== null) {
+        const d = meal.days[idx];
+        if (d && !d.skipped) {
+          dinner = { title: d.title, description: d.description };
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  let workout: { title: string; type: string; duration: number } | null = null;
+  const activePlanId = (trainingPrefs as any)?.active_plan_id as string | null;
+  if (
+    (trainingPlanRow as any)?.content &&
+    activePlanId &&
+    (trainingPlanRow as any).id === activePlanId
+  ) {
+    try {
+      const plan = JSON.parse((trainingPlanRow as any).content);
+      const idx = todayPlanIndex(
+        (trainingPlanRow as any).created_at,
+        plan.days?.length ?? 0,
+      );
+      if (idx !== null) {
+        const d = plan.days[idx];
+        if (d && d.type !== 'rest') {
+          workout = { title: d.title, type: d.type, duration: d.duration ?? 45 };
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Top 5 open household tasks (any member can claim)
+  let openTasks: { title: string; bountyXp: number; bountyTokens: number }[] = [];
+  const householdId = (membership as any)?.household_id as string | undefined;
+  if (householdId) {
+    const { data: tasks } = await admin
+      .from('household_tasks')
+      .select('title, bounty_xp, bounty_tokens')
+      .eq('household_id', householdId)
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    openTasks = ((tasks as any[]) ?? []).map((t) => ({
+      title: t.title,
+      bountyXp: t.bounty_xp ?? 0,
+      bountyTokens: t.bounty_tokens ?? 0,
+    }));
+  }
+
+  // Weather — only fetched when the user has set a location
+  let weather: MorningContext['weather'] = null;
+  if (lat != null && lon != null) {
+    try {
+      const w = await fetchTodayForecast(lat, lon, tz);
+      if (w) {
+        weather = {
+          city,
+          tempMin: w.tempMin,
+          tempMax: w.tempMax,
+          precipitationMm: w.precipitationMm,
+          windMaxKmh: w.windMaxKmh,
+          conditionLabel: w.conditionLabel,
+        };
+      }
+    } catch (err) {
+      console.error('[morning-briefing] weather fetch failed', userId, err);
+    }
+  }
+
   const ctx: MorningContext = {
     date: dateString,
     dayOfWeek,
@@ -97,6 +216,10 @@ export async function runMorningBriefingFor(userId: string) {
     manaLevel,
     events: events.map((e) => ({ start: e.start, title: e.title })),
     pendingHabits,
+    dinner,
+    workout,
+    openTasks,
+    weather,
   };
 
   let output;
