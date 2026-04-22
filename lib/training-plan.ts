@@ -7,29 +7,29 @@ import type {
 } from '@/lib/prompts';
 
 const exerciseSchema = z.object({
-  name: z.string().min(1).max(160),
+  name: z.string().min(1).max(200),
   sets: z.number().int().min(0).max(30),
-  reps: z.string().min(1).max(60),
+  reps: z.string().min(1).max(200),
   restSeconds: z.number().int().min(0).max(900),
-  notes: z.string().max(400).optional(),
+  notes: z.string().max(500).optional(),
 });
 
 const daySchema = z.object({
-  day: z.string().min(1).max(40),
+  day: z.string().min(1).max(60),
   type: z.enum(['strength', 'cardio', 'conditioning', 'mobility', 'rest']),
-  title: z.string().min(1).max(160),
+  title: z.string().min(1).max(200),
   duration: z.number().int().min(0).max(300),
-  focus: z.string().min(1).max(300),
-  warmup: z.array(z.string().min(1).max(300)).max(15).default([]),
+  focus: z.string().min(1).max(400),
+  warmup: z.array(z.string().min(1).max(400)).max(15).default([]),
   exercises: z.array(exerciseSchema).max(25).default([]),
-  cooldown: z.array(z.string().min(1).max(300)).max(15).default([]),
+  cooldown: z.array(z.string().min(1).max(400)).max(15).default([]),
 });
 
 const planSchema = z.object({
-  summary: z.string().min(1).max(800),
-  weeksSuggested: z.number().int().min(1).max(26).default(6),
-  progressionTips: z.array(z.string().min(1).max(500)).max(15).default([]),
-  safetyNotes: z.array(z.string().min(1).max(500)).max(15).default([]),
+  summary: z.string().min(1).max(1000),
+  weeksSuggested: z.number().int().min(1).max(52).default(6),
+  progressionTips: z.array(z.string().min(1).max(600)).max(20).default([]),
+  safetyNotes: z.array(z.string().min(1).max(600)).max(20).default([]),
   days: z.array(daySchema).min(5).max(9),
 });
 
