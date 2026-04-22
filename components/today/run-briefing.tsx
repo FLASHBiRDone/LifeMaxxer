@@ -2,45 +2,47 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-type State =
+type Status =
   | { kind: 'idle' }
   | { kind: 'pending' }
-  | { kind: 'ok'; questCount: number }
+  | { kind: 'ok'; questCount: number; at: number }
   | { kind: 'error'; message: string };
 
 export function RunBriefingButton({ hasBriefing }: { hasBriefing: boolean }) {
   const router = useRouter();
-  const [state, setState] = useState<State>({ kind: 'idle' });
+  const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
   async function run() {
-    setState({ kind: 'pending' });
+    setStatus({ kind: 'pending' });
     try {
       const res = await fetch('/api/briefing/run', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
         const msg = data.error ?? `HTTP ${res.status}`;
         console.error('[briefing] failed', msg, data);
-        setState({ kind: 'error', message: msg });
+        setStatus({ kind: 'error', message: msg });
         return;
       }
       const questCount = data?.result?.questCount ?? 0;
-      setState({ kind: 'ok', questCount });
+      // Set the toast FIRST so it's queued before we kick the router to
+      // re-fetch server data. The toast persists until the user dismisses
+      // it or clicks the button again — no auto-clear, so no race with
+      // the server refresh remounting parts of the tree.
+      setStatus({ kind: 'ok', questCount, at: Date.now() });
       router.refresh();
-      // Return to idle after a moment so the button is re-usable
-      setTimeout(() => setState({ kind: 'idle' }), 2000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[briefing] network error', err);
-      setState({ kind: 'error', message: msg });
+      setStatus({ kind: 'error', message: msg });
     }
   }
 
-  const pending = state.kind === 'pending';
-  const ok = state.kind === 'ok';
-  const err = state.kind === 'error';
+  const pending = status.kind === 'pending';
+  const ok = status.kind === 'ok';
+  const err = status.kind === 'error';
 
   return (
     <div className="space-y-2">
@@ -51,22 +53,12 @@ export function RunBriefingButton({ hasBriefing }: { hasBriefing: boolean }) {
         className={cn(
           'inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors',
           'bg-card hover:border-primary/40',
-          ok && 'border-primary/40 text-primary',
-          err && 'border-destructive/40 text-destructive',
           pending && 'opacity-70',
         )}
       >
         {pending ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" /> Henter brief…
-          </>
-        ) : ok ? (
-          <>
-            <Check className="h-4 w-4" /> Oppdatert · {state.questCount} oppdrag
-          </>
-        ) : err ? (
-          <>
-            <AlertTriangle className="h-4 w-4" /> Feil – prøv igjen
           </>
         ) : hasBriefing ? (
           <>
@@ -78,8 +70,50 @@ export function RunBriefingButton({ hasBriefing }: { hasBriefing: boolean }) {
           </>
         )}
       </button>
+
+      {ok && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary animate-fade-up"
+        >
+          <Check className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <p className="flex-1">
+            Brief oppdatert
+            {status.questCount > 0 && (
+              <>
+                {' '}
+                · {status.questCount}{' '}
+                {status.questCount === 1 ? 'nytt oppdrag' : 'nye oppdrag'}
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStatus({ kind: 'idle' })}
+            className="text-primary/70 hover:text-primary flex-shrink-0"
+            aria-label="Lukk"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {err && (
-        <p className="text-xs text-destructive break-words">{state.message}</p>
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        >
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <p className="flex-1 break-words">{status.message}</p>
+          <button
+            type="button"
+            onClick={() => setStatus({ kind: 'idle' })}
+            className="text-destructive/70 hover:text-destructive flex-shrink-0"
+            aria-label="Lukk"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );
