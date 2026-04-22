@@ -2,9 +2,10 @@ import { google, calendar_v3 } from 'googleapis';
 import { serverEnv } from '@/lib/env';
 import { decrypt, encrypt } from '@/lib/crypto';
 
+// Full calendar scope is needed so we can create a dedicated
+// "LifeMaxxing" calendar for app-generated events.
 export const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar',
   'openid',
   'email',
   'profile',
@@ -151,41 +152,65 @@ const LIFEMAXXING_CAL_DESC = 'Automatisk lagde hendelser fra LifeMaxxer';
 export async function getOrCreateLifemaxxingCalendar(
   auth: Awaited<ReturnType<typeof authorizedClient>>['client'],
   cached: string | null,
-): Promise<{ id: string; rotated: boolean }> {
+): Promise<{ id: string; rotated: boolean; fallbackPrimary?: boolean }> {
   if (cached) return { id: cached, rotated: false };
 
   const calendar = google.calendar({ version: 'v3', auth });
 
   // Look for an existing calendar with the name (user may have created
-  // it manually or we may have just not stored the id yet).
-  const list = await calendar.calendarList.list({ maxResults: 250 });
-  const existing = (list.data.items ?? []).find(
-    (c) => c.summary === LIFEMAXXING_CAL_NAME,
-  );
-  if (existing?.id) return { id: existing.id, rotated: true };
-
-  // Create a new calendar dedicated to LifeMaxxer events.
-  const created = await calendar.calendars.insert({
-    requestBody: {
-      summary: LIFEMAXXING_CAL_NAME,
-      description: LIFEMAXXING_CAL_DESC,
-      timeZone: 'Europe/Oslo',
-    },
-  });
-  const id = created.data.id;
-  if (!id) throw new Error('kunne ikke opprette LifeMaxxing-kalenderen');
-
-  // Give the new calendar a teal color that matches the app theme.
+  // it manually, or we may have just not stored the id yet). If the
+  // token doesn't even have scope to list calendars, fall back.
   try {
-    await calendar.calendarList.patch({
-      calendarId: id,
-      requestBody: { colorId: '7' }, // Google calendar "Peacock" — a teal-ish blue
-    });
-  } catch {
-    /* non-critical */
+    const list = await calendar.calendarList.list({ maxResults: 250 });
+    const existing = (list.data.items ?? []).find(
+      (c) => c.summary === LIFEMAXXING_CAL_NAME,
+    );
+    if (existing?.id) return { id: existing.id, rotated: true };
+  } catch (err: unknown) {
+    console.warn('[lifemaxxing-cal] calendarList.list failed, using primary', err);
+    return { id: 'primary', rotated: false, fallbackPrimary: true };
   }
 
-  return { id, rotated: true };
+  // Create a new calendar dedicated to LifeMaxxer events. If the token
+  // lacks the broader calendar scope (older OAuth tokens only have the
+  // events scope), silently fall back to the user's primary calendar
+  // and let them reconnect Google Calendar to unlock the dedicated one.
+  try {
+    const created = await calendar.calendars.insert({
+      requestBody: {
+        summary: LIFEMAXXING_CAL_NAME,
+        description: LIFEMAXXING_CAL_DESC,
+        timeZone: 'Europe/Oslo',
+      },
+    });
+    const id = created.data.id;
+    if (!id) throw new Error('kunne ikke opprette LifeMaxxing-kalenderen');
+
+    // Give the new calendar a teal color that matches the app theme.
+    try {
+      await calendar.calendarList.patch({
+        calendarId: id,
+        requestBody: { colorId: '7' }, // "Peacock" — teal-ish blue
+      });
+    } catch {
+      /* non-critical */
+    }
+
+    return { id, rotated: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    // "Insufficient Permission" / 403 means the user's token predates
+    // our scope bump. Fall back to primary so events still land.
+    if (
+      message.toLowerCase().includes('insufficient') ||
+      message.toLowerCase().includes('permission') ||
+      (err as { code?: number })?.code === 403
+    ) {
+      console.warn('[lifemaxxing-cal] insufficient scope, falling back to primary');
+      return { id: 'primary', rotated: false, fallbackPrimary: true };
+    }
+    throw err;
+  }
 }
 
 export type EventPatch = {

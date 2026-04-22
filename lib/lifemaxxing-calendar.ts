@@ -31,12 +31,10 @@ export async function withLifemaxxingCalendar(
   const { client, rotated } = await authorizedClient(stored);
 
   const cached = ((tokens as any).lifemaxxing_calendar_id as string | null) ?? null;
-  const { id: calendarId, rotated: calRotated } = await getOrCreateLifemaxxingCalendar(
-    client,
-    cached,
-  );
+  const { id: calendarId, rotated: calRotated, fallbackPrimary } =
+    await getOrCreateLifemaxxingCalendar(client, cached);
 
-  if (rotated || calRotated) {
+  if (rotated || (calRotated && !fallbackPrimary)) {
     const patch: Record<string, string> = {
       updated_at: new Date().toISOString(),
     };
@@ -44,7 +42,11 @@ export async function withLifemaxxingCalendar(
       patch.access_token = rotated.access_token;
       patch.expires_at = rotated.expires_at;
     }
-    if (calRotated) {
+    // Only persist real calendar ids. 'primary' is a fallback used when
+    // the user's OAuth token doesn't grant calendar-creation scope — we
+    // don't want to cache that or they'd stay on primary forever even
+    // after reconnecting.
+    if (calRotated && !fallbackPrimary) {
       patch.lifemaxxing_calendar_id = calendarId;
     }
     await supabase.from('google_tokens').update(patch).eq('user_id', userId);
