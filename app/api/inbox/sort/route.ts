@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sortInboxItems } from '@/lib/inbox-sort';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -10,21 +11,30 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: items } = await supabase
-    .from('brain_dump')
-    .select('id, content')
-    .eq('user_id', user.id)
-    .eq('processed', false)
-    .order('created_at', { ascending: true })
-    .limit(30);
+  const [{ data: items }, { data: profile }] = await Promise.all([
+    supabase
+      .from('brain_dump')
+      .select('id, content')
+      .eq('user_id', user.id)
+      .eq('processed', false)
+      .order('created_at', { ascending: true })
+      .limit(30),
+    supabase
+      .from('user_profiles')
+      .select('locale')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ]);
 
   const list = (items as { id: string; content: string }[] | null) ?? [];
   if (list.length === 0) {
     return NextResponse.json({ suggestions: [] });
   }
 
+  const locale = normalizeLocale((profile as any)?.locale);
+
   try {
-    const result = await sortInboxItems(list);
+    const result = await sortInboxItems(list, locale);
     await supabase.from('ai_messages').insert({
       user_id: user.id,
       role: 'assistant',

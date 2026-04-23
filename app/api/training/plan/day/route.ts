@@ -5,6 +5,7 @@ import { swapTrainingDay } from '@/lib/training-plan';
 import { authorizedClient, patchEvent, deleteEvent, createEvent } from '@/lib/google';
 import { mealPlanWeek, osloDateAt } from '@/lib/time';
 import type { TrainingGoal, TrainingEquipment } from '@/lib/prompts';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 export const maxDuration = 45;
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     .select('locale')
     .eq('id', user.id)
     .maybeSingle();
-  const locale = ((profile as any)?.locale ?? 'nb') as 'nb' | 'en';
+  const locale = normalizeLocale((profile as any)?.locale);
 
   try {
     const swap = await swapTrainingDay(

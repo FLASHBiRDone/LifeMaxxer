@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getClaude, MODELS, estimateCostUsd } from '@/lib/claude';
 import { INBOX_SORT_V1 } from '@/lib/prompts';
 import type { InboxItem, InboxSortSuggestion } from '@/lib/prompts';
+import type { Locale } from '@/lib/prompts/locales';
 
 const suggestionSchema = z.object({
   suggestions: z.array(
@@ -22,13 +23,16 @@ export type SortResult = {
   promptVersion: string;
 };
 
-export async function sortInboxItems(items: InboxItem[]): Promise<SortResult> {
+export async function sortInboxItems(
+  items: InboxItem[],
+  locale: Locale = 'nb',
+): Promise<SortResult> {
   const client = getClaude();
   const res = await client.messages.create({
     model: MODELS.morningBriefing,
     max_tokens: Math.min(2048, 100 + items.length * 80),
-    system: INBOX_SORT_V1.system,
-    messages: [{ role: 'user', content: INBOX_SORT_V1.buildUser(items) }],
+    system: INBOX_SORT_V1.systemFor(locale),
+    messages: [{ role: 'user', content: INBOX_SORT_V1.buildUserFor(locale, items) }],
   });
 
   const text = res.content

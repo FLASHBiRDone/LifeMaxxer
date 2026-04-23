@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateTrainingPlan } from '@/lib/training-plan';
 import type { TrainingGoal, TrainingEquipment } from '@/lib/prompts';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 export const maxDuration = 90;
@@ -31,7 +32,7 @@ export async function POST() {
     );
   }
 
-  const locale = ((profile as any)?.locale ?? 'nb') as 'nb' | 'en';
+  const locale = normalizeLocale((profile as any)?.locale);
 
   try {
     const result = await generateTrainingPlan({

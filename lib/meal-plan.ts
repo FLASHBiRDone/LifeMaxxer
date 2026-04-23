@@ -40,8 +40,8 @@ export async function generateMealPlan(params: MealPlanParams): Promise<MealPlan
   const res = await client.messages.create({
     model: MODELS.morningBriefing,
     max_tokens: 4000,
-    system: MEAL_PLAN_V1.system,
-    messages: [{ role: 'user', content: MEAL_PLAN_V1.buildUser(params) }],
+    system: MEAL_PLAN_V1.systemFor(params.locale),
+    messages: [{ role: 'user', content: MEAL_PLAN_V1.buildUserFor(params) }],
   });
 
   const text = res.content
@@ -74,11 +74,11 @@ export async function swapMealPlanDay(
   const res = await client.messages.create({
     model: MODELS.morningBriefing,
     max_tokens: 1500,
-    system: MEAL_PLAN_V1.system,
+    system: MEAL_PLAN_V1.systemFor(params.locale),
     messages: [
       {
         role: 'user',
-        content: MEAL_PLAN_V1.buildSwapUser(params, targetDayName, otherDays),
+        content: MEAL_PLAN_V1.buildSwapUserFor(params, targetDayName, otherDays),
       },
     ],
   });

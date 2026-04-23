@@ -58,11 +58,11 @@ export async function swapTrainingDay(
   const res = await client.messages.create({
     model: TRAINING_PLAN_V1.model,
     max_tokens: 2000,
-    system: TRAINING_PLAN_V1.system,
+    system: TRAINING_PLAN_V1.systemFor(params.locale),
     messages: [
       {
         role: 'user',
-        content: TRAINING_PLAN_V1.buildSwapUser(params, targetDayName, otherDays),
+        content: TRAINING_PLAN_V1.buildSwapUserFor(params, targetDayName, otherDays),
       },
     ],
   });
@@ -99,8 +99,8 @@ export async function generateTrainingPlan(
   const res = await client.messages.create({
     model: TRAINING_PLAN_V1.model,
     max_tokens: 6000,
-    system: TRAINING_PLAN_V1.system,
-    messages: [{ role: 'user', content: TRAINING_PLAN_V1.buildUser(params) }],
+    system: TRAINING_PLAN_V1.systemFor(params.locale),
+    messages: [{ role: 'user', content: TRAINING_PLAN_V1.buildUserFor(params) }],
   });
 
   const text = res.content

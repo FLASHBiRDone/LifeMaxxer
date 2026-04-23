@@ -5,6 +5,7 @@ import { generateMealPlan } from '@/lib/meal-plan';
 import { addMealPlanToCalendar } from '@/lib/meal-calendar';
 import { deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ALLERGENS } from '@/lib/allergens';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     .select('locale')
     .eq('id', user.id)
     .maybeSingle();
-  const locale = ((profile as any)?.locale ?? 'nb') as 'nb' | 'en';
+  const locale = normalizeLocale((profile as any)?.locale);
 
   try {
     const result = await generateMealPlan({
