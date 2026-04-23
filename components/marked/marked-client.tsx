@@ -37,6 +37,7 @@ export type Task = {
   id: string;
   household_id: string;
   posted_by_user_id: string;
+  assignee_user_id: string | null;
   title: string;
   description: string | null;
   category_id: string | null;
@@ -46,6 +47,12 @@ export type Task = {
   due_at: string | null;
   status: string;
   created_at: string;
+};
+
+export type AssignableMember = {
+  id: string;
+  label: string;
+  initial: string;
 };
 
 export type DoneTask = {
@@ -67,6 +74,7 @@ export function MarkedClient({
   categories,
   rewards,
   memberMap,
+  members,
 }: {
   currentUserId: string;
   xpBalance: number;
@@ -76,6 +84,7 @@ export function MarkedClient({
   categories: Category[];
   rewards: RewardLite[];
   memberMap: Record<string, { label: string; initial: string }>;
+  members: AssignableMember[];
 }) {
   const [openTasks, setOpenTasks] = useState<Task[]>(initialOpenTasks);
   const [doneTasks, setDoneTasks] = useState<DoneTask[]>(initialRecentDone);
@@ -236,7 +245,13 @@ export function MarkedClient({
                 category={t.category_id ? categoryMap.get(t.category_id) ?? null : null}
                 reward={t.bounty_reward_id ? rewardMap.get(t.bounty_reward_id) ?? null : null}
                 poster={memberMap[t.posted_by_user_id] ?? null}
+                assignee={
+                  t.assignee_user_id ? memberMap[t.assignee_user_id] ?? null : null
+                }
                 isMine={t.posted_by_user_id === currentUserId}
+                canComplete={
+                  !t.assignee_user_id || t.assignee_user_id === currentUserId
+                }
                 working={workingId === t.id}
                 onComplete={() => completeTask(t)}
                 onCancel={() => cancelTask(t)}
@@ -294,6 +309,8 @@ export function MarkedClient({
         onClose={() => setCreateOpen(false)}
         categories={categories}
         rewards={rewards}
+        members={members}
+        currentUserId={currentUserId}
         xpBalance={xpBalance}
         tokenBalance={tokenBalance}
         onCreated={onCreated}
@@ -307,7 +324,9 @@ function TaskCard({
   category,
   reward,
   poster,
+  assignee,
   isMine,
+  canComplete,
   working,
   onComplete,
   onCancel,
@@ -316,13 +335,16 @@ function TaskCard({
   category: Category | null;
   reward: RewardLite | null;
   poster: { label: string; initial: string } | null;
+  assignee: { label: string; initial: string } | null;
   isMine: boolean;
+  canComplete: boolean;
   working: boolean;
   onComplete: () => void;
   onCancel: () => void;
 }) {
   const due = task.due_at ? new Date(task.due_at) : null;
   const isOverdue = due && due.getTime() < Date.now();
+  const completeDisabled = working || isMine || !canComplete;
   return (
     <li className="rounded-2xl border bg-card p-4 soft-shadow space-y-2.5">
       <div className="flex items-start gap-3">
@@ -353,6 +375,11 @@ function TaskCard({
                   {poster.initial}
                 </span>
                 {poster.label}
+              </span>
+            )}
+            {assignee && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
+                → {assignee.label}
               </span>
             )}
             {due && (
@@ -387,11 +414,17 @@ function TaskCard({
           type="button"
           size="sm"
           onClick={onComplete}
-          disabled={working || isMine}
-          title={isMine ? 'Du la ut denne selv' : undefined}
+          disabled={completeDisabled}
+          title={
+            isMine
+              ? 'Du la ut denne selv'
+              : !canComplete
+                ? `Kun for ${assignee?.label ?? 'tildelt person'}`
+                : undefined
+          }
           className={cn(
             'border-transparent',
-            isMine
+            completeDisabled
               ? 'bg-muted text-muted-foreground'
               : 'grad-primary text-primary-foreground',
           )}
@@ -400,6 +433,8 @@ function TaskCard({
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : isMine ? (
             'Din'
+          ) : !canComplete ? (
+            assignee ? `Kun for ${assignee.label}` : 'Låst'
           ) : (
             <>
               <Check className="h-3.5 w-3.5 mr-1" /> Fullfør

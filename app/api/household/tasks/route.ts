@@ -13,6 +13,7 @@ const postSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(1000).nullable().optional(),
   categoryId: z.string().uuid().nullable().optional(),
+  assigneeUserId: z.string().uuid().nullable().optional(),
   bountyXp: z.number().int().min(0).max(100000).default(0),
   bountyTokens: z.number().int().min(0).max(100000).default(0),
   bountyRewardId: z.string().uuid().nullable().optional(),
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
   let q = supabase
     .from('household_tasks')
     .select(
-      'id, household_id, posted_by_user_id, title, description, category_id, bounty_xp, bounty_tokens, bounty_reward_id, due_at, recurrence, status, completed_by_user_id, completed_at, created_at',
+      'id, household_id, posted_by_user_id, assignee_user_id, title, description, category_id, bounty_xp, bounty_tokens, bounty_reward_id, due_at, recurrence, status, completed_by_user_id, completed_at, created_at',
     )
     .in('household_id', householdIds)
     .order('created_at', { ascending: false })
@@ -93,11 +94,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: fundError }, { status: 400 });
   }
 
+  // If an assignee is specified, verify they're actually a member of
+  // the same household — no cross-household assignment possible.
+  let assigneeUserId: string | null = null;
+  if (parsed.data.assigneeUserId) {
+    const { data: member } = await supabase
+      .from('household_members')
+      .select('user_id')
+      .eq('household_id', householdId)
+      .eq('user_id', parsed.data.assigneeUserId)
+      .maybeSingle();
+    if (!member) {
+      return NextResponse.json(
+        { error: 'Personen er ikke medlem av husholdet.' },
+        { status: 400 },
+      );
+    }
+    assigneeUserId = parsed.data.assigneeUserId;
+  }
+
   const { data: task, error } = await supabase
     .from('household_tasks')
     .insert({
       household_id: householdId,
       posted_by_user_id: user.id,
+      assignee_user_id: assigneeUserId,
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       category_id: parsed.data.categoryId ?? null,

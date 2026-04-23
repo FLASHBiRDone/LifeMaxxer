@@ -13,6 +13,8 @@ export type OpenTask = {
   bounty_tokens: number;
   bounty_reward_label: string | null;
   posted_by_user_id: string;
+  assignee_user_id: string | null;
+  assignee_label: string | null;
 };
 
 /**
@@ -71,6 +73,10 @@ export function TodayOpenTasks({
       <ul className="space-y-2">
         {tasks.slice(0, 3).map((t) => {
           const isMine = t.posted_by_user_id === currentUserId;
+          const assignedToOther =
+            t.assignee_user_id !== null && t.assignee_user_id !== currentUserId;
+          const disabled =
+            isMine || assignedToOther || completingId === t.id;
           return (
             <li
               key={t.id}
@@ -79,6 +85,11 @@ export function TodayOpenTasks({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{t.title}</p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {t.assignee_label && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary px-1.5 py-0.5 text-[10px] font-semibold">
+                      → {t.assignee_label}
+                    </span>
+                  )}
                   {t.bounty_xp > 0 && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
                       <Trophy className="h-3 w-3" /> {t.bounty_xp} XP
@@ -100,11 +111,17 @@ export function TodayOpenTasks({
                 type="button"
                 size="sm"
                 onClick={() => complete(t)}
-                disabled={isMine || completingId === t.id}
-                title={isMine ? 'Du la ut denne selv' : undefined}
+                disabled={disabled}
+                title={
+                  isMine
+                    ? 'Du la ut denne selv'
+                    : assignedToOther
+                      ? `Kun for ${t.assignee_label}`
+                      : undefined
+                }
                 className={cn(
                   'border-transparent',
-                  isMine
+                  disabled
                     ? 'bg-muted text-muted-foreground'
                     : 'grad-primary text-primary-foreground',
                 )}
@@ -113,6 +130,8 @@ export function TodayOpenTasks({
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : isMine ? (
                   'Din'
+                ) : assignedToOther ? (
+                  `→ ${t.assignee_label}`
                 ) : (
                   <>
                     <Check className="h-3.5 w-3.5 mr-1" /> Fullfør

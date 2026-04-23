@@ -55,7 +55,7 @@ export default async function MarkedPage() {
     supabase
       .from('household_tasks')
       .select(
-        'id, household_id, posted_by_user_id, title, description, category_id, bounty_xp, bounty_tokens, bounty_reward_id, due_at, status, created_at',
+        'id, household_id, posted_by_user_id, assignee_user_id, title, description, category_id, bounty_xp, bounty_tokens, bounty_reward_id, due_at, status, created_at',
       )
       .eq('status', 'open')
       .order('created_at', { ascending: false })
@@ -87,6 +87,7 @@ export default async function MarkedPage() {
 
   const memberList = (members as any[] | null) ?? [];
   let memberMap: Record<string, { label: string; initial: string }> = {};
+  let assignableMembers: { id: string; label: string; initial: string }[] = [];
   if (memberList.length > 0) {
     const { data: profs } = await supabase
       .from('user_profiles')
@@ -102,6 +103,19 @@ export default async function MarkedPage() {
         initial: label.charAt(0).toUpperCase(),
       };
     }
+    // Build a stable list for the create-task member picker. Put the
+    // current user first so "me" is always the default option.
+    assignableMembers = memberList
+      .map((m) => ({
+        id: m.user_id,
+        label: memberMap[m.user_id]?.label ?? 'Medlem',
+        initial: memberMap[m.user_id]?.initial ?? '?',
+      }))
+      .sort((a, b) => {
+        if (a.id === user.id) return -1;
+        if (b.id === user.id) return 1;
+        return a.label.localeCompare(b.label);
+      });
   }
 
   return (
@@ -115,6 +129,7 @@ export default async function MarkedPage() {
         categories={(categories as any[]) ?? []}
         rewards={(rewards as any[]) ?? []}
         memberMap={memberMap}
+        members={assignableMembers}
       />
     </main>
   );

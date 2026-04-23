@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
-import type { Category, RewardLite, Task } from './marked-client';
+import type { AssignableMember, Category, RewardLite, Task } from './marked-client';
 
 export function TaskCreateDialog({
   open,
   onClose,
   categories,
   rewards,
+  members,
+  currentUserId,
   xpBalance,
   tokenBalance,
   onCreated,
@@ -21,6 +23,8 @@ export function TaskCreateDialog({
   onClose: () => void;
   categories: Category[];
   rewards: RewardLite[];
+  members: AssignableMember[];
+  currentUserId: string;
   xpBalance: number;
   tokenBalance: number;
   onCreated: (task: Task, debit: { xp: number; tokens: number }) => void;
@@ -28,6 +32,7 @@ export function TaskCreateDialog({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [assigneeUserId, setAssigneeUserId] = useState<string | null>(null);
   const [bountyXp, setBountyXp] = useState<number>(0);
   const [bountyTokens, setBountyTokens] = useState<number>(0);
   const [bountyRewardId, setBountyRewardId] = useState<string | null>(null);
@@ -40,6 +45,7 @@ export function TaskCreateDialog({
       setTitle('');
       setDescription('');
       setCategoryId(categories[0]?.id ?? null);
+      setAssigneeUserId(null);
       setBountyXp(0);
       setBountyTokens(0);
       setBountyRewardId(null);
@@ -67,6 +73,7 @@ export function TaskCreateDialog({
           title: title.trim(),
           description: description.trim() || null,
           categoryId,
+          assigneeUserId,
           bountyXp,
           bountyTokens,
           bountyRewardId,
@@ -170,6 +177,63 @@ export function TaskCreateDialog({
               ))}
             </div>
           </div>
+
+          {members.length > 1 && (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Tildel til (valgfritt)
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAssigneeUserId(null)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                    assigneeUserId === null
+                      ? 'grad-primary text-primary-foreground border-transparent'
+                      : 'bg-background hover:border-primary/40',
+                  )}
+                >
+                  Åpen for alle
+                </button>
+                {members.map((m) => {
+                  const on = assigneeUserId === m.id;
+                  const selfSuffix = m.id === currentUserId ? ' (meg)' : '';
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() =>
+                        setAssigneeUserId(on ? null : m.id)
+                      }
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors inline-flex items-center gap-1.5',
+                        on
+                          ? 'grad-primary text-primary-foreground border-transparent'
+                          : 'bg-background hover:border-primary/40',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'h-4 w-4 rounded-full text-[9px] font-bold inline-flex items-center justify-center',
+                          on
+                            ? 'bg-primary-foreground/25 text-primary-foreground'
+                            : 'grad-primary text-primary-foreground',
+                        )}
+                      >
+                        {m.initial}
+                      </span>
+                      {m.label}
+                      {selfSuffix}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Tildelte oppgaver kan kun fullføres av den valgte personen.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">

@@ -122,7 +122,7 @@ export default async function TodayPage() {
       ? supabase
           .from('household_tasks')
           .select(
-            'id, title, bounty_xp, bounty_tokens, bounty_reward_id, posted_by_user_id',
+            'id, title, bounty_xp, bounty_tokens, bounty_reward_id, posted_by_user_id, assignee_user_id',
           )
           .eq('household_id', householdId)
           .eq('status', 'open')
@@ -213,6 +213,7 @@ export default async function TodayPage() {
     bounty_tokens: (t.bounty_tokens ?? 0) as number,
     bounty_reward_id: (t.bounty_reward_id ?? null) as string | null,
     posted_by_user_id: t.posted_by_user_id as string,
+    assignee_user_id: (t.assignee_user_id ?? null) as string | null,
   }));
   let rewardLabelById: Record<string, string> = {};
   const rewardIds = openTasksList
@@ -227,6 +228,25 @@ export default async function TodayPage() {
       rewardLabelById[r.id] = `${r.emoji ?? '🎁'} ${r.title}`;
     }
   }
+  // Resolve member labels for any assignee refs so the open-tasks card
+  // can show a "→ Emma" badge.
+  let assigneeLabelById: Record<string, string> = {};
+  const assigneeIds = Array.from(
+    new Set(
+      openTasksList
+        .map((t) => t.assignee_user_id)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  );
+  if (assigneeIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('user_profiles')
+      .select('id, display_name, email')
+      .in('id', assigneeIds);
+    for (const p of ((profs as any[]) ?? [])) {
+      assigneeLabelById[p.id] = p.display_name ?? p.email ?? 'Medlem';
+    }
+  }
   const openTasks: OpenTask[] = openTasksList.map((t) => ({
     id: t.id,
     title: t.title,
@@ -236,6 +256,10 @@ export default async function TodayPage() {
       ? rewardLabelById[t.bounty_reward_id] ?? 'Belønning'
       : null,
     posted_by_user_id: t.posted_by_user_id,
+    assignee_user_id: t.assignee_user_id,
+    assignee_label: t.assignee_user_id
+      ? assigneeLabelById[t.assignee_user_id] ?? 'Medlem'
+      : null,
   }));
 
   const hour = new Date().getHours();
