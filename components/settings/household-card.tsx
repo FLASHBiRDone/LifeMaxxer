@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, Copy, Loader2, LogIn, Trash2, UserPlus, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,7 @@ export function HouseholdCard({
   invites: Invite[];
   currentDisplayName: string | null;
 }) {
+  const router = useRouter();
   const [invites, setInvites] = useState<Invite[]>(initialInvites);
   const [displayName, setDisplayName] = useState(currentDisplayName ?? '');
   const [savingName, setSavingName] = useState(false);
@@ -84,6 +86,9 @@ export function HouseholdCard({
       });
       if (res.ok) {
         setNameSaved(true);
+        // Re-fetch server components so the Settings header and any
+        // other places reading display_name pick up the new value.
+        router.refresh();
         setTimeout(() => setNameSaved(false), 1500);
       }
     } finally {

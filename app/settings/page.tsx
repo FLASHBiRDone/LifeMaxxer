@@ -103,7 +103,12 @@ export default async function SettingsPage({
 
   const params = await searchParams;
   const gcalStatus = typeof params.gcal === 'string' ? params.gcal : null;
-  const initial = (user.email ?? '?').charAt(0).toUpperCase();
+
+  // Prefer the user's chosen display name; fall back to their email so
+  // the header always has something meaningful instead of "?".
+  const displayName =
+    ((profile as any)?.display_name as string | null) || user.email || '?';
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <main className="container max-w-xl py-6 space-y-6">
@@ -115,7 +120,12 @@ export default async function SettingsPage({
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
             {t('nav.settings')}
           </p>
-          <h1 className="text-xl font-bold truncate">{user.email}</h1>
+          <h1 className="text-xl font-bold truncate">{displayName}</h1>
+          {(profile as any)?.display_name && user.email && (
+            <p className="text-[11px] text-muted-foreground truncate">
+              {user.email}
+            </p>
+          )}
         </div>
       </header>
 
