@@ -23,10 +23,33 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { name, kind, target_frequency, target_value, color } = body;
+  const {
+    name,
+    kind,
+    target_frequency,
+    target_value,
+    color,
+    schedule_days,
+    grace_days,
+  } = body;
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+  }
+
+  // Validate schedule shape: array of weekday numbers 0..6
+  let scheduleArr: number[] = [];
+  if (Array.isArray(schedule_days)) {
+    for (const n of schedule_days) {
+      if (typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 6) {
+        if (!scheduleArr.includes(n)) scheduleArr.push(n);
+      }
+    }
+  }
+  // grace_days: clamp to 0..14
+  let grace = 0;
+  if (typeof grace_days === 'number' && Number.isInteger(grace_days)) {
+    grace = Math.max(0, Math.min(14, grace_days));
   }
 
   const { data, error } = await supabase
@@ -39,6 +62,8 @@ export async function POST(request: NextRequest) {
       target_value: target_value ?? null,
       color: color ?? 'emerald',
       archived: false,
+      schedule_days: scheduleArr,
+      grace_days: grace,
     })
     .select()
     .single();

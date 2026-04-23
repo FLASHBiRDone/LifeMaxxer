@@ -184,6 +184,8 @@ export function HabitList({
           kind: editing.kind,
           target_frequency: editing.target_frequency as 'daily' | 'weekly',
           color: editing.color,
+          schedule_days: (editing as any).schedule_days ?? [],
+          grace_days: (editing as any).grace_days ?? 0,
         } : undefined}
         onSave={handleSave}
       />

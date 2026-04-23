@@ -3,15 +3,16 @@ import { redirect } from 'next/navigation';
 import { Sunrise, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { osloDayBounds, todayPlanIndex } from '@/lib/time';
+import { filterHabitsForToday } from '@/lib/habit-schedule';
 import { TodayQuests } from '@/components/today/quests';
 import { EnergyCheckIn } from '@/components/today/energy';
-import { RunBriefingButton } from '@/components/today/run-briefing';
 import { TodayHabits } from '@/components/today/habits';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
 import { TodayPlansPreview } from '@/components/today/plans-preview';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
+import { BriefCard } from '@/components/today/brief-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,12 +25,22 @@ type BriefingOutput = {
 
 type Level = 'low' | 'medium' | 'high';
 
+function addDaysIso(iso: string, delta: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
 export default async function TodayPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const { dateString } = osloDayBounds();
+  // Used by the habit grace-period filter — fetch the last 14 days of
+  // logs (max grace_days = 14) so we can decide which scheduled days
+  // are still pending and should carry over to today.
+  const fromDate = addDaysIso(dateString, -14);
 
   const { data: membership } = await supabase
     .from('household_members')
@@ -54,7 +65,7 @@ export default async function TodayPage() {
     { data: quests },
     { data: mana },
     { data: habits },
-    { data: habitLogs },
+    { data: recentHabitLogs },
     { data: mealPlanRow },
     { data: trainingPlanRow },
     { data: trainingPrefs },
@@ -78,14 +89,14 @@ export default async function TodayPage() {
       .maybeSingle(),
     supabase
       .from('habits')
-      .select('id, name, color')
+      .select('id, name, color, schedule_days, grace_days, created_at')
       .eq('user_id', user.id)
       .eq('archived', false),
     supabase
       .from('habit_logs')
-      .select('habit_id')
+      .select('habit_id, logged_for')
       .eq('user_id', user.id)
-      .eq('logged_for', dateString),
+      .gte('logged_for', fromDate),
     supabase
       .from('ai_messages')
       .select('id, content, created_at')
@@ -132,9 +143,18 @@ export default async function TodayPage() {
     try { briefing = JSON.parse(briefingRow.content) as BriefingOutput; } catch { /* */ }
   }
 
-  const habitsList = (habits as any[]) ?? [];
-  const loggedSet = new Set((habitLogs ?? []).map((l: any) => l.habit_id));
+  // Apply schedule + grace filter so habits scheduled for prior days
+  // disappear from /today unless they fall inside their grace window.
+  const allHabits = (habits as any[]) ?? [];
+  const recentLogs = ((recentHabitLogs as any[]) ?? []).map((l) => ({
+    habit_id: l.habit_id as string,
+    logged_for: l.logged_for as string,
+  }));
+  const habitsList = filterHabitsForToday(allHabits, recentLogs);
+  const todaysLogs = recentLogs.filter((l) => l.logged_for === dateString);
+  const loggedSet = new Set(todaysLogs.map((l) => l.habit_id));
   const habitsDone = habitsList.filter((h: any) => loggedSet.has(h.id)).length;
+
   const rawQuests = (quests as any[]) ?? [];
 
   const completerIds = Array.from(
@@ -259,6 +279,7 @@ export default async function TodayPage() {
 
   return (
     <main className="container max-w-xl py-6 space-y-5">
+      {/* TOP BANNERS */}
       {showMorningRitual && (
         <Link
           href="/gm"
@@ -277,6 +298,7 @@ export default async function TodayPage() {
 
       <LocationPrompt alreadyHasCity={Boolean(userCity)} />
 
+      {/* HERO — at-a-glance numbers */}
       <TodayHero
         intro={briefing?.intro ?? null}
         habitsDone={habitsDone}
@@ -286,27 +308,15 @@ export default async function TodayPage() {
         energyLevel={(mana as any)?.level as Level | null ?? null}
       />
 
-      {(briefing?.summary || briefing?.clothing) && (
-        <section className="rounded-2xl border bg-card p-4 soft-shadow space-y-2">
-          {briefing.summary && (
-            <p className="text-sm leading-relaxed">{briefing.summary}</p>
-          )}
-          {briefing.clothing && (
-            <p className="text-xs text-muted-foreground">👕 {briefing.clothing}</p>
-          )}
-        </section>
-      )}
-
-      <TodayShortcuts />
-
-      <TodayPlansPreview
-        dinner={todayDinner}
-        workout={todayWorkout}
-        people={dinnerPeople}
+      {/* THE BRIEF — primary morning action */}
+      <BriefCard
+        intro={briefing?.intro ?? null}
+        summary={briefing?.summary ?? null}
+        clothing={briefing?.clothing ?? null}
+        onGeneratedAt={(briefingRow as any)?.created_at ?? null}
       />
 
-      <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
-
+      {/* TODAY'S ASSIGNMENTS */}
       <TodayQuests quests={questsList} />
 
       <TodayHabits
@@ -314,11 +324,21 @@ export default async function TodayPage() {
         loggedToday={[...loggedSet] as string[]}
       />
 
+      {/* PLANS */}
+      <TodayPlansPreview
+        dinner={todayDinner}
+        workout={todayWorkout}
+        people={dinnerPeople}
+      />
+
+      {/* OPEN MARKETPLACE TASKS */}
+      <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
+
+      {/* CHECK-IN */}
       <EnergyCheckIn initialLevel={(mana as any)?.level as Level | null ?? null} />
 
-      <div className="pt-1">
-        <RunBriefingButton hasBriefing={Boolean(briefing)} />
-      </div>
+      {/* NAV — moved to bottom; shortcuts are navigation, not the focus */}
+      <TodayShortcuts />
     </main>
   );
 }
