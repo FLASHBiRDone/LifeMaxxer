@@ -6,6 +6,10 @@ import { clearPlanEvents, deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ensureTrainingHabit } from '@/lib/training-habit';
 import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
 import { buildTrainingImagePrompt } from '@/lib/prompts/training-image';
+import {
+  buildExerciseImagePrompt,
+  exerciseSlug,
+} from '@/lib/prompts/exercise-image';
 import { uploadPlanImage } from '@/lib/image-storage';
 import { normalizeLocale } from '@/lib/prompts/locales';
 import type { TrainingEquipment } from '@/lib/prompts';
@@ -139,6 +143,54 @@ export async function POST(request: NextRequest) {
     plan.days.forEach((d: any, i: number) => {
       d.imageUrl = urls[i] ?? null;
     });
+
+    // Per-exercise images, deduplicated by name across the whole week
+    // so the same "Knebøy" in Monday + Wednesday uses the same asset
+    // (cuts ~30% of image calls on a typical plan).
+    const uniqueExercises = new Map<string, { name: string; sample: any }>();
+    for (const day of plan.days) {
+      for (const ex of day.exercises ?? []) {
+        const slug = exerciseSlug(ex.name);
+        if (!slug || uniqueExercises.has(slug)) continue;
+        uniqueExercises.set(slug, { name: ex.name, sample: ex });
+      }
+    }
+    const slugToUrl: Record<string, string> = {};
+    await Promise.all(
+      [...uniqueExercises.entries()].map(async ([slug, { sample }]) => {
+        try {
+          const prompt = buildExerciseImagePrompt({
+            exercise: sample,
+            location,
+            equipment,
+            locale,
+          });
+          const img = await generateImage(prompt, { aspectRatio: '1:1' });
+          const ext =
+            img.mimeType === 'image/png'
+              ? 'png'
+              : img.mimeType === 'image/webp'
+                ? 'webp'
+                : 'jpg';
+          const url = await uploadPlanImage(
+            supabase,
+            user.id,
+            `training/${planRow.id}/ex/${slug}.${ext}`,
+            img,
+          );
+          slugToUrl[slug] = url;
+        } catch (err) {
+          console.error('[exercise-image] failed for', slug, err);
+        }
+      }),
+    );
+    for (const day of plan.days) {
+      for (const ex of day.exercises ?? []) {
+        const slug = exerciseSlug(ex.name);
+        if (slug && slugToUrl[slug]) ex.imageUrl = slugToUrl[slug];
+      }
+    }
+
     await supabase
       .from('ai_messages')
       .update({ content: JSON.stringify(plan) })

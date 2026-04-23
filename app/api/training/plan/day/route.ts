@@ -8,6 +8,10 @@ import type { TrainingGoal, TrainingEquipment } from '@/lib/prompts';
 import { normalizeLocale } from '@/lib/prompts/locales';
 import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
 import { buildTrainingImagePrompt } from '@/lib/prompts/training-image';
+import {
+  buildExerciseImagePrompt,
+  exerciseSlug,
+} from '@/lib/prompts/exercise-image';
 import { uploadPlanImage } from '@/lib/image-storage';
 
 export const runtime = 'nodejs';
@@ -181,6 +185,76 @@ export async function POST(request: NextRequest) {
         (plan.days[dayIndex] as any).imageUrl = url;
       } catch (err) {
         console.error('[training-image] swap regen failed', err);
+      }
+
+      // Per-exercise images for the swapped day. Reuse slugs that
+      // already have a URL elsewhere in the plan so a repeated
+      // 'Knebøy' doesn't cost another image.
+      try {
+        const existingBySlug = new Map<string, string>();
+        for (const d of plan.days as any[]) {
+          for (const ex of d.exercises ?? []) {
+            const s = exerciseSlug(ex.name);
+            if (s && ex.imageUrl && !existingBySlug.has(s)) {
+              existingBySlug.set(s, ex.imageUrl);
+            }
+          }
+        }
+        const location = ((prefs as any)?.location as
+          | 'home'
+          | 'gym'
+          | 'outdoor'
+          | 'mixed'
+          | undefined) ?? 'mixed';
+        const equipment =
+          (((prefs as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
+        const exercises = (newDay.exercises ?? []) as any[];
+        const slugs = Array.from(
+          new Set(
+            exercises.map((ex) => exerciseSlug(ex.name)).filter(Boolean),
+          ),
+        );
+        await Promise.all(
+          slugs.map(async (slug) => {
+            if (existingBySlug.has(slug)) return;
+            const sample = exercises.find(
+              (ex) => exerciseSlug(ex.name) === slug,
+            );
+            if (!sample) return;
+            try {
+              const prompt = buildExerciseImagePrompt({
+                exercise: sample,
+                location,
+                equipment,
+                locale,
+              });
+              const img = await generateImage(prompt, { aspectRatio: '1:1' });
+              const ext =
+                img.mimeType === 'image/png'
+                  ? 'png'
+                  : img.mimeType === 'image/webp'
+                    ? 'webp'
+                    : 'jpg';
+              const url = await uploadPlanImage(
+                supabase,
+                user.id,
+                `training/${planMessageId}/ex/${slug}.${ext}`,
+                img,
+              );
+              existingBySlug.set(slug, url);
+            } catch (err) {
+              console.error('[exercise-image] swap regen failed', slug, err);
+            }
+          }),
+        );
+        for (const ex of exercises) {
+          const s = exerciseSlug(ex.name);
+          if (s && existingBySlug.has(s)) {
+            (ex as any).imageUrl = existingBySlug.get(s)!;
+          }
+        }
+      } catch (err) {
+        console.error('[exercise-image] swap bulk regen failed', err);
       }
     }
 

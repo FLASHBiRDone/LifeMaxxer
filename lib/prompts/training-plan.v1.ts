@@ -43,6 +43,7 @@ export type TrainingExercise = {
   reps: string;
   restSeconds: number;
   notes?: string;
+  imageUrl?: string | null;
 };
 
 export type TrainingDay = {

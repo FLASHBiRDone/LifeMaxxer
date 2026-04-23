@@ -945,6 +945,22 @@ function ExerciseRow({
             <Check className="h-3.5 w-3.5" strokeWidth={3} />
           ) : null}
         </span>
+        {exercise.imageUrl && (
+          <span
+            className={cn(
+              'h-11 w-11 rounded-lg overflow-hidden bg-muted flex-shrink-0',
+              done && 'opacity-60',
+            )}
+            aria-hidden
+          >
+            <img
+              src={exercise.imageUrl}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           <p
             className={cn(
