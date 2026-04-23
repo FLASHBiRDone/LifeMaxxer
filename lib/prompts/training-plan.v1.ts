@@ -54,6 +54,7 @@ export type TrainingDay = {
   warmup: string[];
   exercises: TrainingExercise[];
   cooldown: string[];
+  imageUrl?: string | null;
 };
 
 export type TrainingPlanOutput = {

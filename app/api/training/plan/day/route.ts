@@ -6,6 +6,9 @@ import { authorizedClient, patchEvent, deleteEvent, createEvent } from '@/lib/go
 import { mealPlanWeek, osloDateAt } from '@/lib/time';
 import type { TrainingGoal, TrainingEquipment } from '@/lib/prompts';
 import { normalizeLocale } from '@/lib/prompts/locales';
+import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
+import { buildTrainingImagePrompt } from '@/lib/prompts/training-image';
+import { uploadPlanImage } from '@/lib/image-storage';
 
 export const runtime = 'nodejs';
 export const maxDuration = 45;
@@ -143,6 +146,47 @@ export async function POST(request: NextRequest) {
     const nowRest = newDay.type === 'rest';
 
     plan.days[dayIndex] = newDay;
+
+    // Regenerate the image for the swapped day so the thumbnail
+    // matches the new workout. Clear it if the day is now a rest day.
+    if (isImageGenConfigured()) {
+      if (nowRest) {
+        (plan.days[dayIndex] as any).imageUrl = null;
+      } else {
+        try {
+          const location = ((prefs as any)?.location as
+            | 'home'
+            | 'gym'
+            | 'outdoor'
+            | 'mixed'
+            | undefined) ?? 'mixed';
+          const equipment =
+            (((prefs as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
+          const prompt = buildTrainingImagePrompt({
+            day: newDay,
+            location,
+            equipment,
+            locale,
+          });
+          const img = await generateImage(prompt, { aspectRatio: '16:9' });
+          const ext =
+            img.mimeType === 'image/png'
+              ? 'png'
+              : img.mimeType === 'image/webp'
+                ? 'webp'
+                : 'jpg';
+          const url = await uploadPlanImage(
+            supabase,
+            user.id,
+            `training/${planMessageId}/${dayIndex}.${ext}`,
+            img,
+          );
+          (plan.days[dayIndex] as any).imageUrl = url;
+        } catch (err) {
+          console.error('[training-image] swap regen failed', err);
+        }
+      }
+    }
 
     const { error: updateErr } = await supabase
       .from('ai_messages')

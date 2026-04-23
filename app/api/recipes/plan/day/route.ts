@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 import { swapMealPlanDay } from '@/lib/meal-plan';
 import { authorizedClient, patchEvent, deleteEvent } from '@/lib/google';
 import { mealPlanWeek, osloDateAt } from '@/lib/time';
+import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
+import { buildMealImagePrompt } from '@/lib/prompts/meal-image';
+import { uploadPlanImage } from '@/lib/image-storage';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -86,6 +90,37 @@ export async function POST(request: NextRequest) {
     );
 
     record.days[dayIndex] = swap.day;
+
+    // Regenerate the image for the swapped day so the thumbnail
+    // actually matches the new dish. Non-blocking failure.
+    if (isImageGenConfigured()) {
+      try {
+        const locale = normalizeLocale(record.params?.locale);
+        const prompt = buildMealImagePrompt({
+          title: swap.day.title,
+          description: swap.day.description,
+          locale,
+          diet: record.params?.diet,
+          people: record.params?.people,
+        });
+        const img = await generateImage(prompt, { aspectRatio: '4:3' });
+        const ext =
+          img.mimeType === 'image/png'
+            ? 'png'
+            : img.mimeType === 'image/webp'
+              ? 'webp'
+              : 'jpg';
+        const url = await uploadPlanImage(
+          supabase,
+          user.id,
+          `meal/${planMessageId}/${dayIndex}.${ext}`,
+          img,
+        );
+        (record.days[dayIndex] as any).imageUrl = url;
+      } catch (err) {
+        console.error('[meal-image] swap regen failed', err);
+      }
+    }
 
     const { error: updateErr } = await supabase
       .from('ai_messages')

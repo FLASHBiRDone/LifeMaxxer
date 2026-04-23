@@ -112,6 +112,14 @@ export async function DELETE(request: Request) {
     console.error('[training-plan] delete: event cleanup failed', err);
   }
 
+  // Remove the plan's generated images so storage doesn't accumulate
+  try {
+    const { deletePlanImages } = await import('@/lib/image-storage');
+    await deletePlanImages(supabase, user.id, `training/${planId}`);
+  } catch (err) {
+    console.error('[training-plan] delete: image cleanup failed', err);
+  }
+
   // Unlink the active plan if this one was it — avoids dangling FK
   await supabase
     .from('training_preferences')

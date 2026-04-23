@@ -7,6 +7,7 @@ type MealDay = {
   description: string;
   prepMinutes: number;
   cookMinutes: number;
+  imageUrl?: string | null;
 };
 
 type TrainingDay = {
@@ -15,6 +16,7 @@ type TrainingDay = {
   title: string;
   focus: string;
   duration: number;
+  imageUrl?: string | null;
 };
 
 const TRAINING_ICON: Record<TrainingDay['type'], React.ComponentType<{ className?: string }>> = {
@@ -49,8 +51,19 @@ export function TodayPlansPreview({
       {dinner && (
         <Link
           href="/recipes"
-          className="group rounded-2xl border bg-card p-4 soft-shadow card-hover flex flex-col gap-2 relative overflow-hidden"
+          className="group rounded-2xl border bg-card soft-shadow card-hover flex flex-col relative overflow-hidden"
         >
+          {dinner.imageUrl && (
+            <div className="aspect-[4/3] bg-muted">
+              <img
+                src={dinner.imageUrl}
+                alt={dinner.title}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          )}
+          <div className="p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
               <ChefHat className="h-4 w-4" />
@@ -75,14 +88,26 @@ export function TodayPlansPreview({
               </span>
             )}
           </div>
+          </div>
         </Link>
       )}
 
       {workout && (
         <Link
           href="/training"
-          className="group rounded-2xl border bg-card p-4 soft-shadow card-hover flex flex-col gap-2 relative overflow-hidden"
+          className="group rounded-2xl border bg-card soft-shadow card-hover flex flex-col relative overflow-hidden"
         >
+          {workout.imageUrl && workout.type !== 'rest' && (
+            <div className="aspect-video bg-muted">
+              <img
+                src={workout.imageUrl}
+                alt={workout.title}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          )}
+          <div className="p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <div
               className={
@@ -116,6 +141,7 @@ export function TodayPlansPreview({
                 <Flame className="h-3 w-3" /> {workout.duration} min
               </span>
             )}
+          </div>
           </div>
         </Link>
       )}

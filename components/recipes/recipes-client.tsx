@@ -44,6 +44,7 @@ type MealPlan = {
     ingredients: { name: string; amount: string }[];
     instructions: string[];
     skipped?: boolean;
+    imageUrl?: string | null;
   }>;
 };
 
@@ -542,6 +543,16 @@ export function RecipesClient({
 
                   {isOpen && !isSkipped && (
                     <div className="border-t border-border/60 px-4 py-4 space-y-4 bg-muted/20">
+                      {d.imageUrl && (
+                        <div className="-mx-4 -mt-4 aspect-[4/3] w-[calc(100%+2rem)] overflow-hidden bg-muted">
+                          <img
+                            src={d.imageUrl}
+                            alt={d.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      )}
                       <div>
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                           Ingredienser

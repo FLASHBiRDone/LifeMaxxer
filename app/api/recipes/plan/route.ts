@@ -6,9 +6,16 @@ import { addMealPlanToCalendar } from '@/lib/meal-calendar';
 import { deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ALLERGENS } from '@/lib/allergens';
 import { normalizeLocale } from '@/lib/prompts/locales';
+import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
+import { buildMealImagePrompt } from '@/lib/prompts/meal-image';
+import { uploadPlanImage, deletePlanImages } from '@/lib/image-storage';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+// Raised to cover plan generation (~15s) + parallel image generation
+// for up to 7 days (~20-30s wall-clock with Promise.all). Needs Vercel
+// Pro; on Hobby plan the request will truncate — set a smaller plan
+// via the days picker to stay inside Hobby's ~60s.
+export const maxDuration = 120;
 
 const requestSchema = z.object({
   people: z.number().int().min(1).max(12),
@@ -94,6 +101,50 @@ export async function POST(request: NextRequest) {
         .eq('id', messageId);
     }
 
+    // Generate a hero image for every day in parallel. Skips silently
+    // when GEMINI_API_KEY is absent. Failures per-day don't poison the
+    // whole plan — we set imageUrl to null and move on.
+    if (isImageGenConfigured()) {
+      const imageUrls = await Promise.all(
+        record.days.map(async (day, i) => {
+          try {
+            const prompt = buildMealImagePrompt({
+              title: day.title,
+              description: day.description,
+              locale,
+              diet: parsed.data.diet,
+              people: parsed.data.people,
+            });
+            const img = await generateImage(prompt, { aspectRatio: '4:3' });
+            const ext =
+              img.mimeType === 'image/png'
+                ? 'png'
+                : img.mimeType === 'image/webp'
+                  ? 'webp'
+                  : 'jpg';
+            const url = await uploadPlanImage(
+              supabase,
+              user.id,
+              `meal/${messageId}/${i}.${ext}`,
+              img,
+            );
+            return url;
+          } catch (err) {
+            console.error('[meal-image] failed for day', i, err);
+            return null;
+          }
+        }),
+      );
+      record.days.forEach((d, i) => {
+        (d as any).imageUrl = imageUrls[i] ?? null;
+      });
+      // Persist the updated content so subsequent reads include the URLs.
+      await supabase
+        .from('ai_messages')
+        .update({ content: JSON.stringify(record) })
+        .eq('id', messageId);
+    }
+
     return NextResponse.json({
       plan: record,
       messageId,
@@ -142,6 +193,13 @@ export async function DELETE(request: NextRequest) {
     await clearPlanEvents(supabase, user.id, planId);
   } catch (err) {
     console.error('[meal-plan] delete: event cleanup failed', err);
+  }
+
+  // Remove the plan's generated images so we don't orphan storage objects
+  try {
+    await deletePlanImages(supabase, user.id, `meal/${planId}`);
+  } catch (err) {
+    console.error('[meal-plan] delete: image cleanup failed', err);
   }
 
   const { error } = await supabase

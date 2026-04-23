@@ -12,6 +12,8 @@ const serverSchema = z.object({
   VAPID_SUBJECT: z.string().min(1).optional(),
   CRON_SECRET: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_IMAGE_MODEL: z.string().default('gemini-3-pro-image-preview'),
 });
 
 const publicSchema = z.object({

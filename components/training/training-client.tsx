@@ -563,6 +563,16 @@ export function TrainingClient({
 
                   {isOpen && !isRest && (
                     <div className="border-t border-border/60 px-4 py-4 space-y-4 bg-muted/20">
+                      {d.imageUrl && (
+                        <div className="-mx-4 -mt-4 aspect-video w-[calc(100%+2rem)] overflow-hidden bg-muted">
+                          <img
+                            src={d.imageUrl}
+                            alt={d.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      )}
                       {d.warmup.length > 0 && (
                         <ExpandSection label="Oppvarming">
                           <ul className="space-y-1">

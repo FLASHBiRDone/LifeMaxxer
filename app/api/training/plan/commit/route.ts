@@ -4,9 +4,16 @@ import { createClient } from '@/lib/supabase/server';
 import { addTrainingPlanToCalendar } from '@/lib/training-calendar';
 import { clearPlanEvents, deletePlanEvents } from '@/lib/calendar-cleanup';
 import { ensureTrainingHabit } from '@/lib/training-habit';
+import { generateImage, isImageGenConfigured } from '@/lib/image-gen';
+import { buildTrainingImagePrompt } from '@/lib/prompts/training-image';
+import { uploadPlanImage } from '@/lib/image-storage';
+import { normalizeLocale } from '@/lib/prompts/locales';
+import type { TrainingEquipment } from '@/lib/prompts';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+// Training plans have up to ~5 non-rest days → ~5 parallel image
+// generations. Bumped to 120s to fit cleanly within Vercel's ceiling.
+export const maxDuration = 120;
 
 const bodySchema = z.object({
   planMessageId: z.string().uuid(),
@@ -65,10 +72,17 @@ export async function POST(request: NextRequest) {
   // Create calendar events on the LifeMaxxing calendar.
   const { data: prefs } = await supabase
     .from('training_preferences')
-    .select('training_time')
+    .select('training_time, location, equipment')
     .eq('user_id', user.id)
     .maybeSingle();
   const time = ((prefs as any)?.training_time as string) ?? '17:00';
+  const location = ((prefs as any)?.location as
+    | 'home'
+    | 'gym'
+    | 'outdoor'
+    | 'mixed'
+    | undefined) ?? 'mixed';
+  const equipment = (((prefs as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
   const calendar = await addTrainingPlanToCalendar(supabase, user.id, plan, time);
 
   if (calendar.status === 'added') {
@@ -81,6 +95,54 @@ export async function POST(request: NextRequest) {
           trainingTime: time,
         },
       })
+      .eq('id', planRow.id);
+  }
+
+  // Generate a hero image per non-rest day using the user's location
+  // + equipment so the scene matches what they actually train in.
+  if (isImageGenConfigured()) {
+    const { data: profileRow } = await supabase
+      .from('user_profiles')
+      .select('locale')
+      .eq('id', user.id)
+      .maybeSingle();
+    const locale = normalizeLocale((profileRow as any)?.locale);
+
+    const urls = await Promise.all(
+      plan.days.map(async (day: any, i: number) => {
+        if (day.type === 'rest') return null;
+        try {
+          const prompt = buildTrainingImagePrompt({
+            day,
+            location,
+            equipment,
+            locale,
+          });
+          const img = await generateImage(prompt, { aspectRatio: '16:9' });
+          const ext =
+            img.mimeType === 'image/png'
+              ? 'png'
+              : img.mimeType === 'image/webp'
+                ? 'webp'
+                : 'jpg';
+          return await uploadPlanImage(
+            supabase,
+            user.id,
+            `training/${planRow.id}/${i}.${ext}`,
+            img,
+          );
+        } catch (err) {
+          console.error('[training-image] failed for day', i, err);
+          return null;
+        }
+      }),
+    );
+    plan.days.forEach((d: any, i: number) => {
+      d.imageUrl = urls[i] ?? null;
+    });
+    await supabase
+      .from('ai_messages')
+      .update({ content: JSON.stringify(plan) })
       .eq('id', planRow.id);
   }
 
