@@ -8,6 +8,11 @@ export const runtime = 'nodejs';
 const bodySchema = z.object({
   display_name: z.string().trim().min(1).max(40).nullable().optional(),
   city: z.string().trim().max(120).nullable().optional(),
+  // When the client already has coordinates (from navigator.geolocation
+  // + reverse geocoding) it can submit them directly so we skip the
+  // server-side forward-geocoding lookup.
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
 });
 
 export async function PATCH(request: NextRequest) {
@@ -29,15 +34,31 @@ export async function PATCH(request: NextRequest) {
     patch.display_name = parsed.data.display_name ?? null;
   }
 
-  // City change triggers a geocoding lookup so we can store lat/lon for
-  // the weather API. Null clears both fields.
   let geocode: {
     city: string;
     latitude: number;
     longitude: number;
     country: string | null;
   } | null = null;
-  if ('city' in parsed.data) {
+
+  const hasCoords =
+    typeof parsed.data.latitude === 'number' &&
+    typeof parsed.data.longitude === 'number';
+
+  if (hasCoords) {
+    // Trust client-provided coordinates; city is optional label.
+    patch.latitude = parsed.data.latitude;
+    patch.longitude = parsed.data.longitude;
+    if ('city' in parsed.data) {
+      patch.city = parsed.data.city ?? null;
+    }
+    geocode = {
+      city: (parsed.data.city as string | undefined) ?? 'Min posisjon',
+      latitude: parsed.data.latitude as number,
+      longitude: parsed.data.longitude as number,
+      country: null,
+    };
+  } else if ('city' in parsed.data) {
     if (!parsed.data.city) {
       patch.city = null;
       patch.latitude = null;

@@ -11,6 +11,7 @@ import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
 import { TodayPlansPreview } from '@/components/today/plans-preview';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
+import { LocationPrompt } from '@/components/today/location-prompt';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,7 @@ export default async function TodayPage() {
     { data: trainingPlanRow },
     { data: trainingPrefs },
     { data: openTasksRaw },
+    { data: locationProfile },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -116,7 +118,14 @@ export default async function TodayPage() {
           .order('created_at', { ascending: false })
           .limit(5)
       : Promise.resolve({ data: [] as any[] }),
+    supabase
+      .from('user_profiles')
+      .select('city')
+      .eq('id', user.id)
+      .maybeSingle(),
   ]);
+
+  const userCity = (locationProfile as any)?.city as string | null | undefined;
 
   let briefing: BriefingOutput | null = null;
   if (briefingRow?.content) {
@@ -265,6 +274,8 @@ export default async function TodayPage() {
           <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
         </Link>
       )}
+
+      <LocationPrompt alreadyHasCity={Boolean(userCity)} />
 
       <TodayHero
         intro={briefing?.intro ?? null}
