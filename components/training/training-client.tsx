@@ -948,7 +948,7 @@ function ExerciseRow({
         {exercise.imageUrl && (
           <span
             className={cn(
-              'h-11 w-11 rounded-lg overflow-hidden bg-muted flex-shrink-0',
+              'h-16 w-16 rounded-xl overflow-hidden bg-muted flex-shrink-0 border',
               done && 'opacity-60',
             )}
             aria-hidden
