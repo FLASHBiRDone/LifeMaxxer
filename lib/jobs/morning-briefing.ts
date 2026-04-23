@@ -267,9 +267,30 @@ export async function runMorningBriefingFor(userId: string) {
     cost_usd: costUsd,
   });
 
-  // Insert quests (main quests from the briefing).
-  if (output.quests.length) {
-    const rows = output.quests.map((q) => ({
+  // Replace any existing briefing-generated main quests for today so
+  // re-running the brief doesn't pile duplicates on top. Only deletes
+  // is_main rows the user hasn't completed yet — completed quests stay
+  // for stats history. User-created (non-main) quests are untouched.
+  await admin
+    .from('quests')
+    .delete()
+    .eq('user_id', userId)
+    .eq('scheduled_for', dateString)
+    .eq('is_main', true)
+    .is('completed_at', null);
+
+  // Skip any quest whose title matches an open marketplace task — the
+  // model sometimes echoes those back as a "main quest" since we hand
+  // it the marketplace context, and that creates two cards for the
+  // same chore.
+  const openTaskTitles = new Set(
+    openTasks.map((t) => t.title.trim().toLowerCase()),
+  );
+  const dedupedQuests = output.quests.filter(
+    (q) => !openTaskTitles.has(q.title.trim().toLowerCase()),
+  );
+  if (dedupedQuests.length) {
+    const rows = dedupedQuests.map((q) => ({
       user_id: userId,
       title: q.title,
       scheduled_for: dateString,

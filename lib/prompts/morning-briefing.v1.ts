@@ -48,6 +48,12 @@ CONTENT RULES:
   forecast (e.g. "Regnjakke og sko du ikke syns synd på"). Empty string
   if no weather data is available.
 - quests: 1–3 main quests for today, each with a short "why".
+- DO NOT include items that already appear in 'Open household tasks'
+  as quests. Those are the marketplace board and are handled there;
+  duplicating them in quests creates two cards for the same chore.
+  Quests should be the user's PERSONAL focus for today — derived from
+  calendar events, energy, pending habits, the meal/workout plan, or
+  unique judgement — not a re-listing of household chores.
 
 OUTPUT FORMAT (strict JSON, no preamble, no trailing text):
 {
