@@ -8,6 +8,8 @@ import { NotificationPreferences } from '@/components/settings/notification-pref
 import { GoogleCalendarCard } from '@/components/settings/google-calendar';
 import { HouseholdCard } from '@/components/settings/household-card';
 import { LocationCard } from '@/components/settings/location-card';
+import { LanguageCard } from '@/components/settings/language-card';
+import { normalizeLocale } from '@/lib/prompts/locales';
 import { SignOutButton } from '@/components/settings/sign-out';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +40,7 @@ export default async function SettingsPage({
         .maybeSingle(),
       supabase
         .from('user_profiles')
-        .select('display_name, city')
+        .select('display_name, city, locale')
         .eq('id', user.id)
         .maybeSingle(),
       supabase
@@ -141,6 +143,7 @@ export default async function SettingsPage({
           currentDisplayName={(profile as any)?.display_name ?? null}
         />
         <LocationCard initialCity={(profile as any)?.city ?? null} />
+        <LanguageCard initialLocale={normalizeLocale((profile as any)?.locale)} />
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
         <NotificationPreferences

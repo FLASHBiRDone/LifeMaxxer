@@ -30,14 +30,23 @@ export async function generateMorningBriefing(
   ctx: MorningContext,
 ): Promise<BriefingResult> {
   const client = getClaude();
+  // Surface in logs whether weather actually made it into the prompt
+  // so the cause of a missing clothing line is obvious in Vercel logs.
+  console.info('[briefing] generating', {
+    locale: ctx.locale,
+    hasWeather: Boolean(ctx.weather),
+    weatherCity: ctx.weather?.city ?? null,
+    eventsCount: ctx.events.length,
+    pendingHabitsCount: ctx.pendingHabits.length,
+  });
   const res = await client.messages.create({
     model: MODELS.morningBriefing,
-    max_tokens: 400,
-    system: MORNING_BRIEFING_V1.system,
+    max_tokens: 600,
+    system: MORNING_BRIEFING_V1.systemFor(ctx.locale),
     messages: [
       {
         role: 'user',
-        content: MORNING_BRIEFING_V1.buildUser(ctx),
+        content: MORNING_BRIEFING_V1.buildUserFor(ctx),
       },
     ],
   });

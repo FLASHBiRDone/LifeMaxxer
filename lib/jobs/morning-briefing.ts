@@ -5,6 +5,7 @@ import { generateMorningBriefing, fallbackBriefing } from '@/lib/briefing';
 import { sendPush } from '@/lib/push';
 import { fetchTodayForecast } from '@/lib/weather';
 import type { MorningContext } from '@/lib/prompts';
+import { normalizeLocale } from '@/lib/prompts/locales';
 
 /**
  * Per-user morning briefing generator. Run for every eligible user each
@@ -33,7 +34,7 @@ export async function runMorningBriefingFor(userId: string) {
         .maybeSingle(),
     ]);
 
-  const locale = ((profile as any)?.locale ?? 'nb') as 'nb' | 'en';
+  const locale = normalizeLocale((profile as any)?.locale);
   const tz = ((profile as any)?.timezone ?? 'Europe/Oslo') as string;
   const city = (profile as any)?.city as string | null;
   const lat = (profile as any)?.latitude as number | null;
@@ -189,11 +190,20 @@ export async function runMorningBriefingFor(userId: string) {
     }));
   }
 
-  // Weather — only fetched when the user has set a location
+  // Weather — only fetched when the user has set a location.
+  // Numeric columns can come back as strings from PostgREST, so coerce
+  // before passing to the Open-Meteo URL builder.
   let weather: MorningContext['weather'] = null;
-  if (lat != null && lon != null) {
+  const latNum = lat == null ? null : Number(lat);
+  const lonNum = lon == null ? null : Number(lon);
+  if (
+    latNum != null &&
+    lonNum != null &&
+    !Number.isNaN(latNum) &&
+    !Number.isNaN(lonNum)
+  ) {
     try {
-      const w = await fetchTodayForecast(lat, lon, tz);
+      const w = await fetchTodayForecast(latNum, lonNum, tz);
       if (w) {
         weather = {
           city,
@@ -203,10 +213,17 @@ export async function runMorningBriefingFor(userId: string) {
           windMaxKmh: w.windMaxKmh,
           conditionLabel: w.conditionLabel,
         };
+      } else {
+        console.warn(
+          '[morning-briefing] weather API returned no daily data',
+          { userId, latNum, lonNum },
+        );
       }
     } catch (err) {
       console.error('[morning-briefing] weather fetch failed', userId, err);
     }
+  } else {
+    console.info('[morning-briefing] weather skipped — no location set', { userId, city });
   }
 
   const ctx: MorningContext = {

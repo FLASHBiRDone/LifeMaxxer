@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { geocodePlace } from '@/lib/weather';
+import { SUPPORTED_LOCALES } from '@/lib/prompts/locales';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,7 @@ const bodySchema = z.object({
   // server-side forward-geocoding lookup.
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  locale: z.enum(SUPPORTED_LOCALES).optional(),
 });
 
 export async function PATCH(request: NextRequest) {
@@ -32,6 +34,9 @@ export async function PATCH(request: NextRequest) {
 
   if ('display_name' in parsed.data) {
     patch.display_name = parsed.data.display_name ?? null;
+  }
+  if ('locale' in parsed.data && parsed.data.locale) {
+    patch.locale = parsed.data.locale;
   }
 
   let geocode: {
