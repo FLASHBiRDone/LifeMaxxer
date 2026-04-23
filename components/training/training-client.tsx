@@ -669,6 +669,47 @@ export function TrainingClient({
                       )}
                     </div>
                   )}
+
+                  {isOpen && isRest && (
+                    <div className="border-t border-border/60 bg-muted/20 overflow-hidden">
+                      {d.imageUrl && (
+                        <div className="aspect-video bg-muted">
+                          <img
+                            src={d.imageUrl}
+                            alt={d.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <div className="px-4 py-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Hviledag – gi kroppen en pause.
+                        </p>
+                        {planId && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => swapDay(idx)}
+                            disabled={swappingDay !== null || deletingDay !== null}
+                            className="w-full"
+                          >
+                            {swappingDay === idx ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                Bytter…
+                              </>
+                            ) : (
+                              <>
+                                <Shuffle className="h-3.5 w-3.5 mr-1.5" /> Gjør om til økt
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}

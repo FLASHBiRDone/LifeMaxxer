@@ -147,44 +147,40 @@ export async function POST(request: NextRequest) {
 
     plan.days[dayIndex] = newDay;
 
-    // Regenerate the image for the swapped day so the thumbnail
-    // matches the new workout. Clear it if the day is now a rest day.
+    // Regenerate the image for the swapped day. Rest days now get a
+    // relaxed-scene image too so the UI stays visually consistent.
     if (isImageGenConfigured()) {
-      if (nowRest) {
-        (plan.days[dayIndex] as any).imageUrl = null;
-      } else {
-        try {
-          const location = ((prefs as any)?.location as
-            | 'home'
-            | 'gym'
-            | 'outdoor'
-            | 'mixed'
-            | undefined) ?? 'mixed';
-          const equipment =
-            (((prefs as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
-          const prompt = buildTrainingImagePrompt({
-            day: newDay,
-            location,
-            equipment,
-            locale,
-          });
-          const img = await generateImage(prompt, { aspectRatio: '16:9' });
-          const ext =
-            img.mimeType === 'image/png'
-              ? 'png'
-              : img.mimeType === 'image/webp'
-                ? 'webp'
-                : 'jpg';
-          const url = await uploadPlanImage(
-            supabase,
-            user.id,
-            `training/${planMessageId}/${dayIndex}.${ext}`,
-            img,
-          );
-          (plan.days[dayIndex] as any).imageUrl = url;
-        } catch (err) {
-          console.error('[training-image] swap regen failed', err);
-        }
+      try {
+        const location = ((prefs as any)?.location as
+          | 'home'
+          | 'gym'
+          | 'outdoor'
+          | 'mixed'
+          | undefined) ?? 'mixed';
+        const equipment =
+          (((prefs as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
+        const prompt = buildTrainingImagePrompt({
+          day: newDay,
+          location,
+          equipment,
+          locale,
+        });
+        const img = await generateImage(prompt, { aspectRatio: '16:9' });
+        const ext =
+          img.mimeType === 'image/png'
+            ? 'png'
+            : img.mimeType === 'image/webp'
+              ? 'webp'
+              : 'jpg';
+        const url = await uploadPlanImage(
+          supabase,
+          user.id,
+          `training/${planMessageId}/${dayIndex}.${ext}`,
+          img,
+        );
+        (plan.days[dayIndex] as any).imageUrl = url;
+      } catch (err) {
+        console.error('[training-image] swap regen failed', err);
       }
     }
 
@@ -368,6 +364,53 @@ export async function DELETE(request: NextRequest) {
     exercises: [],
     cooldown: [],
   };
+
+  // Generate a rest-scene image so the card still has a visual instead
+  // of going blank after the user converts a workout to a rest day.
+  if (isImageGenConfigured()) {
+    try {
+      const { data: prefsForImg } = await supabase
+        .from('training_preferences')
+        .select('location, equipment')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const { data: profileRow } = await supabase
+        .from('user_profiles')
+        .select('locale')
+        .eq('id', user.id)
+        .maybeSingle();
+      const location = ((prefsForImg as any)?.location as
+        | 'home'
+        | 'gym'
+        | 'outdoor'
+        | 'mixed'
+        | undefined) ?? 'mixed';
+      const equipment =
+        (((prefsForImg as any)?.equipment ?? []) as TrainingEquipment[]) ?? [];
+      const prompt = buildTrainingImagePrompt({
+        day: plan.days[dayIndex],
+        location,
+        equipment,
+        locale: normalizeLocale((profileRow as any)?.locale),
+      });
+      const img = await generateImage(prompt, { aspectRatio: '16:9' });
+      const ext =
+        img.mimeType === 'image/png'
+          ? 'png'
+          : img.mimeType === 'image/webp'
+            ? 'webp'
+            : 'jpg';
+      const url = await uploadPlanImage(
+        supabase,
+        user.id,
+        `training/${planMessageId}/${dayIndex}.${ext}`,
+        img,
+      );
+      (plan.days[dayIndex] as any).imageUrl = url;
+    } catch (err) {
+      console.error('[training-image] rest-day regen failed', err);
+    }
+  }
 
   const { error: updateErr } = await supabase
     .from('ai_messages')

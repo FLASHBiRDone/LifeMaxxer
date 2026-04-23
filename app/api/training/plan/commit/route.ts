@@ -110,7 +110,6 @@ export async function POST(request: NextRequest) {
 
     const urls = await Promise.all(
       plan.days.map(async (day: any, i: number) => {
-        if (day.type === 'rest') return null;
         try {
           const prompt = buildTrainingImagePrompt({
             day,

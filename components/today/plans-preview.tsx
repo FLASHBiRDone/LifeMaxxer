@@ -97,7 +97,7 @@ export function TodayPlansPreview({
           href="/training"
           className="group rounded-2xl border bg-card soft-shadow card-hover flex flex-col relative overflow-hidden"
         >
-          {workout.imageUrl && workout.type !== 'rest' && (
+          {workout.imageUrl && (
             <div className="aspect-video bg-muted">
               <img
                 src={workout.imageUrl}

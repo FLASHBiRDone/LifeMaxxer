@@ -32,6 +32,20 @@ const LOCATION_SETTING: Record<TrainingImageContext['location'], string> = {
     'a clean functional training room with neutral decor, hardwood floor, natural daylight through a large window',
 };
 
+// Rest-day scenes per location so the rest-day image fits the person's
+// life rather than a generic sofa stock photo. Shorter than the active
+// LOCATION_SETTING strings because rest images need less direction.
+const REST_SETTING: Record<TrainingImageContext['location'], string> = {
+  home:
+    'a cozy Scandinavian living room with a soft sofa, a warm blanket and a steaming mug on a wooden side table, natural daylight through linen curtains',
+  gym:
+    'a quiet corner of a modern gym lounge with a cushioned bench, towel and water bottle, soft daylight from a nearby window',
+  outdoor:
+    'a Norwegian beach or forest clearing on a calm day, a person sitting on a flat rock or a towel watching the view, warm golden-hour light',
+  mixed:
+    'a calm home setting — either a sofa with a book or an outdoor bench with soft daylight',
+};
+
 // Short hint strings so the prompt stays focused and the model doesn't
 // hallucinate machines the user doesn't actually have access to.
 const EQUIPMENT_HINT: Record<TrainingEquipment, string> = {
@@ -63,6 +77,21 @@ function typeHint(type: TrainingDay['type']): string {
 }
 
 export function buildTrainingImagePrompt(ctx: TrainingImageContext): string {
+  // Rest day → relaxed scene matching the user's normal training context.
+  if (ctx.day.type === 'rest') {
+    const setting = REST_SETTING[ctx.location] ?? REST_SETTING.mixed;
+    return [
+      'Photo-realistic photograph of a relaxed adult resting and recovering.',
+      `Setting: ${setting}.`,
+      'Composition: the person is the clear subject but unposed — reading, stretching gently, sipping a drink, or quietly looking off-camera.',
+      'Subject wears comfortable everyday clothing (soft knit, t-shirt, loose trousers).',
+      'Warm naturalistic lighting, shallow depth of field, subject in sharp focus.',
+      'Calm unhurried mood. Documentary feel, not posed.',
+      'One person only, face soft or off-angle — do not feature the face prominently.',
+      'No text, no watermark, no logos, no brand names, no exercise equipment.',
+    ].join(' ');
+  }
+
   const setting = LOCATION_SETTING[ctx.location] ?? LOCATION_SETTING.mixed;
   const pose = typeHint(ctx.day.type);
   const topExercise = ctx.day.exercises?.[0]?.name ?? ctx.day.title;
