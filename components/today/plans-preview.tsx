@@ -47,7 +47,7 @@ export function TodayPlansPreview({
   if (!dinner && !workout) return null;
 
   return (
-    <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <section className="space-y-3">
       {dinner && (
         <Link
           href="/recipes"
