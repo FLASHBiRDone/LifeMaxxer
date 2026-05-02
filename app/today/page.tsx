@@ -10,6 +10,7 @@ import {
   TodayWorkoutCard,
   TodayDinnerCard,
 } from '@/components/today/plans-preview';
+import { SectionLabel } from '@/components/today/section-label';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
@@ -375,6 +376,9 @@ export default async function TodayPage() {
     <main className="container max-w-xl py-6 space-y-5">
       <LocationPrompt alreadyHasCity={Boolean(userCity)} />
 
+      {/* MORGEN — set the scene */}
+      <SectionLabel kind="morning" />
+
       {hasCoords && (
         <WeatherWidget
           city={userCity ?? null}
@@ -415,7 +419,9 @@ export default async function TodayPage() {
         />
       )}
 
-      {/* TODAY'S ASSIGNMENTS */}
+      {/* DAGEN — today's focus */}
+      <SectionLabel kind="midday" />
+
       <TodayQuests quests={questsList} />
 
       <TodayHabits
@@ -423,17 +429,32 @@ export default async function TodayPage() {
         loggedToday={[...loggedSet] as string[]}
       />
 
-      {/* SUPPLEMENTS — daily dose log (already slot-ordered inside) */}
+      {/* SUPPLEMENTS — already slot-ordered internally */}
       <SupplementsCard items={supplementsToday} currentSlot={currentSlot} />
 
-      {/* AFTERNOON — training */}
-      <TodayWorkoutCard workout={todayWorkout} />
+      {/* ETTERMIDDAG — training (only when there's something to show) */}
+      {todayWorkout && (
+        <>
+          <SectionLabel kind="afternoon" />
+          <TodayWorkoutCard workout={todayWorkout} />
+        </>
+      )}
 
-      {/* EVENING — dinner */}
-      <TodayDinnerCard dinner={todayDinner} people={dinnerPeople} />
+      {/* KVELD — dinner (only when there's something to show) */}
+      {todayDinner && (
+        <>
+          <SectionLabel kind="evening" />
+          <TodayDinnerCard dinner={todayDinner} people={dinnerPeople} />
+        </>
+      )}
 
-      {/* ANYTIME — marketplace tasks (no time anchor) */}
-      <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
+      {/* NÅR DU HAR TID — marketplace tasks (no time anchor) */}
+      {openTasks.length > 0 && (
+        <>
+          <SectionLabel kind="anytime" />
+          <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
+        </>
+      )}
 
       {/* NAV — moved to bottom; shortcuts are navigation, not the focus */}
       <TodayShortcuts />

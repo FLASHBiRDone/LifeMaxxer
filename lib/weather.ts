@@ -25,12 +25,62 @@ export type DailyForecast = {
 
 export type CurrentWeather = {
   tempC: number;
-  windKmh: number;
+  apparentC: number;
+  precipitationMm: number;
+  windMs: number;
+  windGustMs: number;
+  /** Compass bearing the wind blows FROM, 0–360°. */
+  windFromDeg: number;
+  /** Norwegian compass label, e.g. 'sørvest'. */
+  windFromLabel: string;
+  /** Norwegian Beaufort-style label, e.g. 'svak vind'. */
+  windScaleLabel: string;
   isDay: boolean;
   conditionCode: number;
   conditionLabel: string;
   observedAt: string; // ISO timestamp from API
 };
+
+/**
+ * 8-point Norwegian compass label for a wind bearing in degrees.
+ * Matches yr.no's wording — "sørvest" rather than "sørvestlig". Each
+ * sector is 45° wide centered on the cardinal/intercardinal point.
+ */
+export function windDirectionLabel(deg: number): string {
+  const dirs = [
+    'nord',
+    'nordøst',
+    'øst',
+    'sørøst',
+    'sør',
+    'sørvest',
+    'vest',
+    'nordvest',
+  ];
+  const idx = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
+  return dirs[idx];
+}
+
+/**
+ * Norwegian wind-strength label, derived from the standard Beaufort
+ * scale. Returns "stille", "svak vind", "frisk bris", etc., matching
+ * the wording yr.no uses on its current-conditions row.
+ */
+export function windScaleLabel(ms: number): string {
+  if (ms < 0.3) return 'stille';
+  if (ms < 1.6) return 'flau vind';
+  if (ms < 3.4) return 'svak vind';
+  if (ms < 5.5) return 'lett bris';
+  if (ms < 8.0) return 'laber bris';
+  if (ms < 10.8) return 'frisk bris';
+  if (ms < 13.9) return 'liten kuling';
+  if (ms < 17.2) return 'stiv kuling';
+  if (ms < 20.8) return 'sterk kuling';
+  if (ms < 24.5) return 'liten storm';
+  if (ms < 28.5) return 'full storm';
+  if (ms < 32.7) return 'sterk storm';
+  return 'orkan';
+}
 
 /**
  * Resolve a free-form city/place name to coordinates. Returns null when
@@ -157,10 +207,12 @@ export async function fetchTodayForecast(
 }
 
 /**
- * Fetch the live "current" weather snapshot — temp + condition right
- * now. Used by the small widget on /today; cheap enough to call
- * server-side per page render thanks to Next's fetch cache (we set a
- * 10-minute revalidate so refreshes don't hammer the API).
+ * Fetch the live "current" weather snapshot — yr.no-style: temp,
+ * apparent temp, precipitation, wind direction + gust, condition.
+ * Used by the widget on /today; cheap server-side because we set a
+ * 10-minute revalidate so refreshes don't hammer the API. Wind is
+ * requested in m/s so the UI shows numbers that match the labels
+ * Norwegians read on yr ("2 m/s svak vind").
  */
 export async function fetchCurrentWeather(
   latitude: number,
@@ -172,14 +224,22 @@ export async function fetchCurrentWeather(
   url.searchParams.set('longitude', String(longitude));
   url.searchParams.set(
     'current',
-    'temperature_2m,weather_code,wind_speed_10m,is_day',
+    [
+      'temperature_2m',
+      'apparent_temperature',
+      'precipitation',
+      'weather_code',
+      'wind_speed_10m',
+      'wind_direction_10m',
+      'wind_gusts_10m',
+      'is_day',
+    ].join(','),
   );
+  url.searchParams.set('wind_speed_unit', 'ms');
   url.searchParams.set('timezone', timezone);
 
   const res = await fetch(url.toString(), {
     headers: { 'Accept': 'application/json' },
-    // Cache for 10 minutes — current conditions don't change faster
-    // than that and we don't want to hit Open-Meteo on every navigation.
     next: { revalidate: 600 },
   });
   if (!res.ok) return null;
@@ -187,16 +247,28 @@ export async function fetchCurrentWeather(
     current?: {
       time: string;
       temperature_2m: number;
+      apparent_temperature: number;
+      precipitation: number;
       weather_code: number;
       wind_speed_10m: number;
+      wind_direction_10m: number;
+      wind_gusts_10m: number;
       is_day: number;
     };
   };
   const c = body.current;
   if (!c) return null;
+  const windMs = Math.round(c.wind_speed_10m * 10) / 10;
+  const windGustMs = Math.round(c.wind_gusts_10m * 10) / 10;
   return {
     tempC: Math.round(c.temperature_2m * 10) / 10,
-    windKmh: Math.round(c.wind_speed_10m),
+    apparentC: Math.round(c.apparent_temperature * 10) / 10,
+    precipitationMm: Math.round((c.precipitation ?? 0) * 10) / 10,
+    windMs,
+    windGustMs,
+    windFromDeg: Math.round(c.wind_direction_10m),
+    windFromLabel: windDirectionLabel(c.wind_direction_10m),
+    windScaleLabel: windScaleLabel(windMs),
     isDay: Boolean(c.is_day),
     conditionCode: c.weather_code,
     conditionLabel: CONDITION_NB[c.weather_code] ?? 'ukjent',
