@@ -12,6 +12,11 @@ import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
 import { MorningCheckin } from '@/components/today/morning-checkin';
 import { WeatherWidget } from '@/components/today/weather-widget';
+import {
+  SupplementsCard,
+  type Slot as SupplementSlot,
+  type TodaySupplement,
+} from '@/components/today/supplements-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +75,8 @@ export default async function TodayPage() {
     { data: trainingPrefs },
     { data: openTasksRaw },
     { data: locationProfile },
+    { data: supplementsRaw },
+    { data: supplementLogsRaw },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -133,6 +140,16 @@ export default async function TodayPage() {
       .select('city, latitude, longitude, timezone')
       .eq('id', user.id)
       .maybeSingle(),
+    supabase
+      .from('supplements')
+      .select('id, name, dose, emoji, slots, schedule_days, xp_reward, token_reward')
+      .eq('user_id', user.id)
+      .eq('archived', false),
+    supabase
+      .from('supplement_logs')
+      .select('supplement_id, slot')
+      .eq('user_id', user.id)
+      .eq('logged_for', dateString),
   ]);
 
   const userCity = (locationProfile as any)?.city as string | null | undefined;
@@ -269,6 +286,52 @@ export default async function TodayPage() {
       : null,
   }));
 
+  // Today's supplements: filter to weekday-due items, attach which
+  // slots have already been logged today so the card can gate the
+  // "Tatt" buttons. Slot mapping for "current" matches /api/dispense.
+  const dowToday = new Date(dateString + 'T00:00:00').getDay();
+  const oslohour = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      hour12: false,
+      timeZone: 'Europe/Oslo',
+    }).format(new Date()),
+  );
+  const currentSlot: SupplementSlot =
+    oslohour >= 5 && oslohour < 11
+      ? 'morning'
+      : oslohour >= 11 && oslohour < 15
+        ? 'noon'
+        : oslohour >= 15 && oslohour < 21
+          ? 'evening'
+          : 'night';
+
+  const supplementLogs = (supplementLogsRaw as any[]) ?? [];
+  const takenBySupplement = new Map<string, SupplementSlot[]>();
+  for (const l of supplementLogs) {
+    const arr = takenBySupplement.get(l.supplement_id) ?? [];
+    arr.push(l.slot as SupplementSlot);
+    takenBySupplement.set(l.supplement_id, arr);
+  }
+  const supplementsToday: TodaySupplement[] = ((supplementsRaw as any[]) ?? [])
+    .filter((s) => {
+      const days = s.schedule_days ?? [];
+      if (Array.isArray(days) && days.length > 0 && !days.includes(dowToday)) {
+        return false;
+      }
+      return true;
+    })
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      dose: s.dose,
+      emoji: s.emoji,
+      slots: s.slots ?? [],
+      xp_reward: s.xp_reward ?? 0,
+      token_reward: s.token_reward ?? 0,
+      taken_slots: takenBySupplement.get(s.id) ?? [],
+    }));
+
   // Today's dinner + workout pulled from the latest stored plans.
   let todayDinner: any = null;
   let dinnerPeople: number | null = null;
@@ -356,6 +419,9 @@ export default async function TodayPage() {
         habits={habitsList}
         loggedToday={[...loggedSet] as string[]}
       />
+
+      {/* SUPPLEMENTS — daily dose log */}
+      <SupplementsCard items={supplementsToday} currentSlot={currentSlot} />
 
       {/* PLANS */}
       <TodayPlansPreview

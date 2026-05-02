@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { ChefHat, Dumbbell, Inbox, ShoppingBasket, Store, Trophy } from 'lucide-react';
+import { ChefHat, Dumbbell, Inbox, Pill, ShoppingBasket, Store, Trophy } from 'lucide-react';
 
 const SHORTCUTS = [
   { href: '/marked', icon: Store, label: 'Marked' },
   { href: '/training', icon: Dumbbell, label: 'Trening' },
   { href: '/recipes', icon: ChefHat, label: 'Middager' },
+  { href: '/supplements', icon: Pill, label: 'Tilskudd' },
   { href: '/shopping', icon: ShoppingBasket, label: 'Handleliste' },
   { href: '/inbox', icon: Inbox, label: 'Huskelister' },
   { href: '/rewards', icon: Trophy, label: 'Belønninger' },
