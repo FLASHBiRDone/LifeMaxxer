@@ -55,8 +55,10 @@ INNHOLDSREGLER:
   kalenderpunktet, middagen hvis planlagt, treningen hvis planlagt,
   og en værbevisst klesanbefaling. Under 60 ord totalt.
 - clothing: ÉN konkret, praktisk linje om hva man bør ha på, basert på
-  meldingen (f.eks. «Regnjakke og sko du ikke syns synd på»). Tom
-  streng hvis værdata mangler.
+  meldingen (f.eks. «Regnjakke og sko du ikke syns synd på»).
+  HVIS værdata FINNES i input: dette feltet ER PÅKREVD og må gi
+  konkrete plagg + nevne paraply hvis nedbør > 1 mm. Ikke tom streng.
+  HVIS værdata MANGLER (input sier «vær ukjent»): tom streng "".
 - quests: 1–3 hovedoppdrag for dagen, hvert med kort «why».
 - IKKE kopier ting fra «Åpne husholdsoppgaver» som oppdrag. Det er
   markedet og finnes der; å duplisere dem som oppdrag lager to kort
@@ -92,7 +94,12 @@ CONTENT RULES:
   calendar event, the dinner plan if any, the workout if any, and a
   weather-aware clothing hint. Under 60 words total.
 - clothing: ONE concrete, practical line about what to wear given the
-  forecast. Empty string if no weather data is available.
+  forecast.
+  IF weather data IS PRESENT in input: this field is REQUIRED and
+  must give specific garments plus an umbrella mention when
+  precipitation > 1 mm. Never an empty string in this case.
+  IF weather data is MISSING (input says "weather unknown"): empty
+  string "".
 - quests: 1–3 main quests for today, each with a short "why".
 - DO NOT include items that already appear in 'Open household tasks'
   as quests. Those live on the marketplace and duplicating them as

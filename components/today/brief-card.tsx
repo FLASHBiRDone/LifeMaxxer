@@ -16,7 +16,9 @@ type Status =
  * The morning-brief centerpiece on /today. Two states:
  *  - empty: a big primary CTA that generates the brief
  *  - filled: shows intro + summary + clothing line, with a small
- *    refresh action in the footer
+ *    refresh action in the footer. When location is missing, we
+ *    surface a quick hint so the user knows why there's no clothing
+ *    line instead of staring at an empty briefing.
  *
  * Replaces the old run-briefing button at the bottom of the page —
  * the brief is now the first thing the user reads after the hero.
@@ -26,11 +28,13 @@ export function BriefCard({
   summary,
   clothing,
   onGeneratedAt,
+  hasLocation,
 }: {
   intro: string | null;
   summary: string | null;
   clothing: string | null;
   onGeneratedAt: string | null;
+  hasLocation: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -122,6 +126,23 @@ export function BriefCard({
         )}
         {clothing && (
           <p className="text-xs text-muted-foreground pt-1">👕 {clothing}</p>
+        )}
+        {!clothing && !hasLocation && (
+          <p className="text-[11px] text-muted-foreground pt-1">
+            👕{' '}
+            <a
+              href="/settings"
+              className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+            >
+              Sett hjemsted
+            </a>{' '}
+            for værbasert klesråd.
+          </p>
+        )}
+        {!clothing && hasLocation && (
+          <p className="text-[11px] text-muted-foreground pt-1">
+            Værråd kommer på neste oppdatering — trykk Oppdater under.
+          </p>
         )}
       </div>
 

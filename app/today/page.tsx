@@ -338,6 +338,7 @@ export default async function TodayPage() {
         summary={briefing?.summary ?? null}
         clothing={briefing?.clothing ?? null}
         onGeneratedAt={(briefingRow as any)?.created_at ?? null}
+        hasLocation={Boolean(userCity)}
       />
 
       {/* TODAY'S ASSIGNMENTS */}

@@ -63,6 +63,16 @@ export async function generateMorningBriefing(
   }
   const output = briefingSchema.parse(JSON.parse(jsonMatch[0]));
 
+  // Surface what the model actually filled in so 'no clothing' is
+  // diagnosable from logs (weather present in prompt + clothing
+  // empty = the model ignored the requirement, not a wiring bug).
+  console.info('[briefing] generated', {
+    introLen: output.intro?.length ?? 0,
+    summaryLen: output.summary?.length ?? 0,
+    clothingLen: output.clothing?.length ?? 0,
+    questCount: output.quests?.length ?? 0,
+  });
+
   const tokensIn = res.usage.input_tokens;
   const tokensOut = res.usage.output_tokens;
   return {
