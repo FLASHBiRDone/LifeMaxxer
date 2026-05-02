@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
             equipment,
             locale,
           });
-          const img = await generateImage(prompt, { aspectRatio: '1:1' });
+          const img = await generateImage(prompt, { aspectRatio: '16:9' });
           const ext =
             img.mimeType === 'image/png'
               ? 'png'

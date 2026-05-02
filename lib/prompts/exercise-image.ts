@@ -76,17 +76,21 @@ export function buildExerciseImagePrompt(
   const setting = SETTING[ctx.location] ?? SETTING.mixed;
   const equipHint = inferEquipmentHint(ctx.exercise.name, ctx.equipment);
   return [
-    `Photo-realistic fitness demonstration of a single exercise: "${ctx.exercise.name}".`,
-    'One adult athlete performing the movement with clean technical form,',
-    'captured mid-repetition at the most visually recognisable point of the movement.',
+    `Photo-realistic side-by-side TWO-FRAME movement demonstration of "${ctx.exercise.name}".`,
+    'Single wide image composed as a clean diptych split exactly down the middle:',
+    'the LEFT half shows the START position of one repetition,',
+    'the RIGHT half shows the END position of the same repetition.',
+    'Same person, same camera angle, same setting, same wardrobe, same lighting in both halves — only the body position changes.',
+    'A subtle thin vertical seam or small gap separates the two panels (no thick frame).',
     `Setting: ${setting}.`,
     `Equipment: ${equipHint}.`,
     'Subject wears simple athletic clothing appropriate for the setting.',
     'Warm naturalistic lighting, shallow depth of field, subject in sharp focus, clean uncluttered background.',
-    'Square 1:1 composition, subject centered, framed from roughly mid-thigh to just above the head.',
-    'Unposed documentary feel, not a catalogue shoot.',
+    'In each panel the subject is framed from roughly mid-thigh to just above the head, centered, with their full silhouette visible at the most readable point of the movement.',
+    'Documentary feel, not a catalogue shoot.',
     'Face soft or partially off-angle — do not feature the face prominently.',
-    'No text, no watermark, no logos, no brand names, no on-screen captions.',
+    'No text in the image — do NOT write "before", "after", "start", "end", "1", "2" or any captions.',
+    'No watermark, no logos, no brand names, no on-screen captions.',
   ].join(' ');
 }
 

@@ -924,31 +924,15 @@ function ExerciseRow({
         onClick={onToggle}
         disabled={toggling}
         className={cn(
-          'w-full rounded-xl border bg-background px-3 py-2.5 flex items-center gap-3 text-left transition-colors',
+          'w-full rounded-xl border bg-background overflow-hidden text-left transition-colors',
           interactive && 'hover:border-primary/40 card-hover',
           done && 'bg-primary/5 border-primary/30',
         )}
       >
-        <span
-          className={cn(
-            'h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
-            done
-              ? 'grad-primary border-transparent text-primary-foreground'
-              : 'border-muted-foreground/40',
-            !interactive && 'opacity-40',
-          )}
-          aria-hidden
-        >
-          {toggling ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : done ? (
-            <Check className="h-3.5 w-3.5" strokeWidth={3} />
-          ) : null}
-        </span>
         {exercise.imageUrl && (
-          <span
+          <div
             className={cn(
-              'h-16 w-16 rounded-xl overflow-hidden bg-muted flex-shrink-0 border',
+              'aspect-video w-full bg-muted border-b',
               done && 'opacity-60',
             )}
             aria-hidden
@@ -959,30 +943,48 @@ function ExerciseRow({
               loading="lazy"
               className="h-full w-full object-cover"
             />
-          </span>
+          </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p
+        <div className="px-3 py-2.5 flex items-center gap-3">
+          <span
             className={cn(
-              'text-sm font-semibold truncate',
-              done && 'line-through text-muted-foreground',
+              'h-6 w-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all',
+              done
+                ? 'grad-primary border-transparent text-primary-foreground'
+                : 'border-muted-foreground/40',
+              !interactive && 'opacity-40',
             )}
+            aria-hidden
           >
-            {exercise.name}
-          </p>
-          {exercise.notes && (
-            <p className="text-[11px] text-muted-foreground line-clamp-1">
-              {exercise.notes}
+            {toggling ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : done ? (
+              <Check className="h-3.5 w-3.5" strokeWidth={3} />
+            ) : null}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p
+              className={cn(
+                'text-sm font-semibold truncate',
+                done && 'line-through text-muted-foreground',
+              )}
+            >
+              {exercise.name}
             </p>
-          )}
-        </div>
-        <div className="text-right tabular flex-shrink-0">
-          <p className="text-sm font-semibold">
-            {exercise.sets} × {exercise.reps}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            pause {restLabel(exercise.restSeconds)}
-          </p>
+            {exercise.notes && (
+              <p className="text-[11px] text-muted-foreground line-clamp-1">
+                {exercise.notes}
+              </p>
+            )}
+          </div>
+          <div className="text-right tabular flex-shrink-0">
+            <p className="text-sm font-semibold">
+              {exercise.sets} × {exercise.reps}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              pause {restLabel(exercise.restSeconds)}
+            </p>
+          </div>
         </div>
       </Element>
     </li>
