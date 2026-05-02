@@ -4,9 +4,72 @@ import { osloDayBounds, todayPlanIndex } from '@/lib/time';
 import { generateMorningBriefing, fallbackBriefing } from '@/lib/briefing';
 import { sendPush } from '@/lib/push';
 import { fetchTodayForecast } from '@/lib/weather';
+import { fetchLocalDisruptions, type Disruption } from '@/lib/local-events';
 import type { MorningContext } from '@/lib/prompts';
 import { normalizeLocale } from '@/lib/prompts/locales';
 import type { Locale } from '@/lib/prompts/locales';
+
+/** Add N calendar days to a YYYY-MM-DD string. */
+function addDaysIso(iso: string, delta: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+const PREP_KEYWORDS_NB = [
+  'frisør', 'frisor', 'lege', 'tannlege', 'fysio', 'eksamen',
+  'intervju', 'flytur', 'fly ', 'flight', 'tog', 'middag med',
+  'fest', 'bursdag', 'presentasjon', 'foreldremøte', 'samtale',
+  'møte', 'time', 'avtale', 'sjekk', 'undersøkelse',
+];
+const PREP_KEYWORDS_EN = [
+  'hairdresser', 'doctor', 'dentist', 'physio', 'exam',
+  'interview', 'flight', 'train', 'dinner with', 'party',
+  'birthday', 'presentation', 'parent meeting', 'appointment',
+  'meeting', 'check-up', 'visit',
+];
+
+/**
+ * Pick out tomorrow's prep-worthy calendar events. Threshold:
+ * - any event before 11:00 (the early heads-up rule)
+ * - any title containing prep-related keywords (haircut, doctor, etc.)
+ * Returns a compact list with HH:MM in the user's timezone so the UI
+ * and the brief prompt can display them without re-parsing dates.
+ */
+function filterTomorrowEvents(
+  events: { start: string; title: string }[],
+  locale: Locale,
+  tz: string,
+): { time: string; title: string }[] {
+  const keywords = locale === 'en' ? PREP_KEYWORDS_EN : PREP_KEYWORDS_NB;
+  const out: { time: string; title: string }[] = [];
+  for (const e of events) {
+    let date: Date;
+    try {
+      date = new Date(e.start);
+      if (Number.isNaN(date.getTime())) continue;
+    } catch {
+      continue;
+    }
+    const hourStr = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      hour12: false,
+      timeZone: tz,
+    }).format(date);
+    const hour = Number(hourStr);
+    const titleLower = e.title.toLowerCase();
+    const earlyHeadsUp = hour < 11;
+    const prepMatch = keywords.some((kw) => titleLower.includes(kw));
+    if (!earlyHeadsUp && !prepMatch) continue;
+    const time = new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'nb-NO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: tz,
+    }).format(date);
+    out.push({ time, title: e.title });
+  }
+  return out.slice(0, 5);
+}
 
 /**
  * Localised "phase of day" label so the model can match tone to the
@@ -261,12 +324,110 @@ export async function runMorningBriefingFor(userId: string) {
   }).format(new Date());
   const hourNow = Number(nowFmt.slice(0, 2));
   const dayPart = dayPartLabel(hourNow, locale);
+  const isEvening = hourNow >= 17;
+
+  // Tomorrow lookahead: only when the brief runs in the evening so
+  // the user gets a heads-up about early appointments + disruptions
+  // before bed. Compute tomorrow's date string in the user's tz.
+  const tomorrowDate = isEvening
+    ? addDaysIso(dateString, 1)
+    : null;
+
+  // Fetch tomorrow's calendar events too if we have Google access
+  // and we're in evening lookahead mode.
+  let tomorrowEventsRaw: { start: string; title: string }[] = [];
+  if (isEvening && tokenRow) {
+    try {
+      const { client } = await authorizedClient(tokenRow as any);
+      const { start: tStart, end: tEnd } = osloDayBounds(
+        new Date(tomorrowDate! + 'T12:00:00Z'),
+        tz,
+      );
+      const evs = await listEvents(client, tStart, tEnd);
+      tomorrowEventsRaw = evs.map((e) => ({ start: e.start, title: e.title }));
+    } catch (err) {
+      console.error('[morning-briefing] tomorrow calendar fetch failed', userId, err);
+    }
+  }
+  const tomorrowEvents = filterTomorrowEvents(tomorrowEventsRaw, locale, tz);
+
+  // Local disruptions via Claude web search. Cached in ai_messages
+  // so a re-run of the brief on the same city/date reuses the
+  // previous result instead of burning another search call.
+  let todayDisruptions: Disruption[] = [];
+  let tomorrowDisruptions: Disruption[] = [];
+  if (city) {
+    const cacheKey = `${city.toLowerCase().trim()}-${dateString}-${locale}-${isEvening ? 'eve' : 'day'}`;
+    const { data: cachedRow } = await admin
+      .from('ai_messages')
+      .select('content, created_at')
+      .eq('user_id', userId)
+      .eq('context_type', 'local_disruptions')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let cached: any = null;
+    try {
+      if ((cachedRow as any)?.content) {
+        cached = JSON.parse((cachedRow as any).content);
+      }
+    } catch { /* ignore */ }
+
+    let disruptions: { today: Disruption[]; tomorrow: Disruption[] } | null = null;
+    if (cached?.cache_key === cacheKey) {
+      disruptions = {
+        today: cached.today?.disruptions ?? [],
+        tomorrow: cached.tomorrow?.disruptions ?? [],
+      };
+    } else {
+      try {
+        const result = await fetchLocalDisruptions({
+          city,
+          todayDate: dateString,
+          tomorrowDate,
+          locale,
+        });
+        disruptions = {
+          today: result.today.disruptions,
+          tomorrow: result.tomorrow?.disruptions ?? [],
+        };
+        // Persist the structured result so /today's card and the next
+        // brief run can read it without another web search.
+        await admin.from('ai_messages').insert({
+          user_id: userId,
+          role: 'assistant',
+          context_type: 'local_disruptions',
+          prompt_version: 'local-events.v1',
+          content: JSON.stringify({
+            cache_key: cacheKey,
+            generated_at: new Date().toISOString(),
+            city,
+            today: { date: dateString, disruptions: result.today.disruptions },
+            tomorrow: result.tomorrow
+              ? { date: result.tomorrow.date, disruptions: result.tomorrow.disruptions }
+              : null,
+            tomorrow_events: tomorrowEvents,
+          }),
+          tokens_in: result.tokensIn,
+          tokens_out: result.tokensOut,
+          cost_usd: result.costUsd,
+        });
+      } catch (err) {
+        console.error('[morning-briefing] local-events fetch failed', userId, err);
+      }
+    }
+    if (disruptions) {
+      todayDisruptions = disruptions.today;
+      tomorrowDisruptions = disruptions.tomorrow;
+    }
+  }
 
   const ctx: MorningContext = {
     date: dateString,
     dayOfWeek,
     currentTime: nowFmt,
     dayPart,
+    isEvening,
     locale,
     manaLevel,
     restedLevel,
@@ -278,6 +439,15 @@ export async function runMorningBriefingFor(userId: string) {
     workout,
     openTasks,
     weather,
+    disruptions: todayDisruptions.map((d) => ({
+      title: d.title,
+      time: d.time ?? null,
+    })),
+    tomorrowDisruptions: tomorrowDisruptions.map((d) => ({
+      title: d.title,
+      time: d.time ?? null,
+    })),
+    tomorrowEvents,
   };
 
   let output;

@@ -11,6 +11,7 @@ import {
   TodayDinnerCard,
 } from '@/components/today/plans-preview';
 import { SectionLabel } from '@/components/today/section-label';
+import { LocalEventsCard } from '@/components/today/local-events-card';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
@@ -81,6 +82,7 @@ export default async function TodayPage() {
     { data: locationProfile },
     { data: supplementsRaw },
     { data: supplementLogsRaw },
+    { data: localDisruptionsRow },
   ] = await Promise.all([
     supabase
       .from('ai_messages')
@@ -154,6 +156,16 @@ export default async function TodayPage() {
       .select('supplement_id, slot')
       .eq('user_id', user.id)
       .eq('logged_for', dateString),
+    // Latest verified-disruption snapshot from the morning briefing
+    // pipeline. Cached in ai_messages so reading is free here.
+    supabase
+      .from('ai_messages')
+      .select('content, created_at')
+      .eq('user_id', user.id)
+      .eq('context_type', 'local_disruptions')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const userCity = (locationProfile as any)?.city as string | null | undefined;
@@ -336,6 +348,26 @@ export default async function TodayPage() {
       taken_slots: takenBySupplement.get(s.id) ?? [],
     }));
 
+  // Parse the latest local-disruptions snapshot. Stale rows (older
+  // than today, or generated for a different city) are ignored so
+  // we don't show yesterday's marathon notice.
+  let localToday: any[] = [];
+  let localTomorrow: any[] = [];
+  let localTomorrowEvents: any[] = [];
+  if ((localDisruptionsRow as any)?.content) {
+    try {
+      const parsed = JSON.parse((localDisruptionsRow as any).content);
+      const cityMatches = !userCity || !parsed.city
+        || parsed.city.toLowerCase().trim() === (userCity ?? '').toLowerCase().trim();
+      const todayMatches = parsed.today?.date === dateString;
+      if (cityMatches && todayMatches) {
+        localToday = parsed.today?.disruptions ?? [];
+        localTomorrow = parsed.tomorrow?.disruptions ?? [];
+        localTomorrowEvents = parsed.tomorrow_events ?? [];
+      }
+    } catch { /* ignore */ }
+  }
+
   // Today's dinner + workout pulled from the latest stored plans.
   let todayDinner: any = null;
   let dinnerPeople: number | null = null;
@@ -387,6 +419,13 @@ export default async function TodayPage() {
           timezone={userTz ?? null}
         />
       )}
+
+      <LocalEventsCard
+        city={userCity ?? null}
+        disruptions={localToday}
+        tomorrowDisruptions={localTomorrow}
+        tomorrowEvents={localTomorrowEvents}
+      />
 
       {/* HERO — at-a-glance numbers */}
       <TodayHero

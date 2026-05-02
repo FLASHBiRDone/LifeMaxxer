@@ -18,6 +18,8 @@ export type MorningContext = {
   currentTime?: string;
   /** Localized phase-of-day label, e.g. "tidlig morgen" / "ettermiddag". */
   dayPart?: string;
+  /** True when the brief is generated after 17:00 — unlocks tomorrow lookahead. */
+  isEvening?: boolean;
   locale: Locale;
   manaLevel?: 'low' | 'medium' | 'high' | null;
   /** Self-reported sleep quality. Same scale as energy. */
@@ -32,6 +34,12 @@ export type MorningContext = {
   workout?: { title: string; type: string; duration: number } | null;
   openTasks?: { title: string; bountyXp: number; bountyTokens: number }[];
   weather?: WeatherForMorning | null;
+  /** Today's local disruptions (transit, road, broadcast, weather warnings). */
+  disruptions?: { title: string; time?: string | null }[];
+  /** Tomorrow's local disruptions (only set in evening lookahead). */
+  tomorrowDisruptions?: { title: string; time?: string | null }[];
+  /** Tomorrow's prep-worthy calendar events (only set in evening lookahead). */
+  tomorrowEvents?: { time: string; title: string }[];
 };
 
 export type MorningBriefingOutput = {
@@ -58,6 +66,8 @@ ABSOLUTTE REGLER:
 - Hvis energien er «high», foreslå opptil tre, men aldri flere.
 - Hvis brukeren er dårlig uthvilt eller har lavt fokus, senk ambisjonsnivået ÉN hakk: færre oppdrag, mildere språk, og en eksplisitt påminnelse om at det er greit å ta det med ro. Ikke kommenter direkte på «du er sliten» — vis det i hvilke valg du foreslår.
 - Hvis brukeren har lagt igjen et notat (drøm, tanke, noe på hjertet), referér forsiktig til det i intro eller summary uten å gjenta det ordrett. Hvis det er en drøm, hold tonen lett og ikke tolk den dypt.
+- Hvis det finnes verifiserte lokale forstyrrelser, nevn dem som ÉN kort, faktuell setning i summary — ikke pynt på dem og ikke spekuler. Hopp over hvis listen er tom.
+- Hvis det er kveld og det finnes lookahead-data for i morgen (forstyrrelser eller tidlige avtaler), legg til en kort setning på slutten av summary: «I morgen: …» — maks 14 ord. Ingen «huske å», ingen kommandoer, bare en heads-up.
 - Skriv på bokmål.
 - Brukeren har egen vilje. Du foreslår, du befaler ikke.
 - Tilpass tonen til klokkeslettet: tidlig morgen (før 09) er rolig og oppvåknende; formiddag og ettermiddag er mer handlingsrettet. Hvis det er kveld, gi en kort oppsummering av hva som er igjen i dag og fokuser på en mild avslutning, ikke en heisende start.
@@ -100,6 +110,8 @@ ABSOLUTE RULES:
 - If energy is "high," offer up to three, but never more.
 - If the user is poorly rested or low on focus, dial down ambition by ONE notch: fewer quests, softer language, and a quiet reminder that taking it easy is fine. Don't say "you're tired" — show it in the choices you make.
 - If the user left a note (dream, thought, something on their mind), reference it gently in the intro or summary without quoting it back. If it's a dream, keep the tone light and don't try to interpret it.
+- If verified local disruptions are listed, mention them as ONE short factual sentence in summary — don't editorialise, don't speculate. Skip if the list is empty.
+- If it's evening and tomorrow lookahead data is present (disruptions or early appointments), append a short "Tomorrow: …" line at the end of summary — max 14 words. No "remember to", no commands, just a heads-up.
 - Write in English.
 - The user has agency. You suggest; you do not command.
 - Match tone to time of day: early morning (before 09) is gentle and waking-up; mid-morning and afternoon are more action-oriented. If it's evening, summarize briefly what's left and aim for a soft wind-down, not a hyped-up start.
@@ -156,6 +168,9 @@ type UserCopy = {
   restedLine: (level: string) => string;
   focusLine: (level: string) => string;
   noteTitle: string;
+  disruptionsTitle: string;
+  tomorrowDisruptionsTitle: string;
+  tomorrowEventsTitle: string;
   weatherTitle: string;
   weatherLocation: (city: string) => string;
   weatherCondition: (cond: string) => string;
@@ -182,6 +197,9 @@ const COPY: Record<Locale, UserCopy> = {
     restedLine: (lvl) => `Uthvilt: ${lvl}`,
     focusLine: (lvl) => `Fokus / hodet klart: ${lvl}`,
     noteTitle: 'Brukerens notat fra morgen-innsjekken:',
+    disruptionsTitle: 'Lokale forstyrrelser i dag (verifiserte fra websøk):',
+    tomorrowDisruptionsTitle: 'Lokale forstyrrelser i morgen:',
+    tomorrowEventsTitle: 'Tidlige eller forberedelsesverdige avtaler i morgen:',
     weatherTitle: 'Været i dag:',
     weatherLocation: (city) => `- Sted: ${city}`,
     weatherCondition: (c) => `- Forhold: ${c}`,
@@ -206,6 +224,9 @@ const COPY: Record<Locale, UserCopy> = {
     restedLine: (lvl) => `Rested: ${lvl}`,
     focusLine: (lvl) => `Focus / mental clarity: ${lvl}`,
     noteTitle: "User's note from the morning check-in:",
+    disruptionsTitle: "Today's local disruptions (verified from web search):",
+    tomorrowDisruptionsTitle: "Tomorrow's local disruptions:",
+    tomorrowEventsTitle: 'Tomorrow’s early or prep-worthy appointments:',
     weatherTitle: "Today's weather:",
     weatherLocation: (city) => `- Location: ${city}`,
     weatherCondition: (c) => `- Condition: ${c}`,
@@ -286,8 +307,32 @@ export const MORNING_BRIEFING_V1 = {
       ? `\n\n${c.noteTitle}\n${ctx.extraNote.trim()}`
       : '';
 
+    const disruptionsBlock = (ctx.disruptions ?? []).length > 0
+      ? `\n\n${c.disruptionsTitle}\n${
+          ctx.disruptions!
+            .map((d) => `- ${d.time ? `(${d.time}) ` : ''}${d.title}`)
+            .join('\n')
+        }`
+      : '';
+
+    const tomorrowDisruptionsBlock = (ctx.tomorrowDisruptions ?? []).length > 0
+      ? `\n\n${c.tomorrowDisruptionsTitle}\n${
+          ctx.tomorrowDisruptions!
+            .map((d) => `- ${d.time ? `(${d.time}) ` : ''}${d.title}`)
+            .join('\n')
+        }`
+      : '';
+
+    const tomorrowEventsBlock = (ctx.tomorrowEvents ?? []).length > 0
+      ? `\n\n${c.tomorrowEventsTitle}\n${
+          ctx.tomorrowEvents!
+            .map((e) => `- ${e.time} ${e.title}`)
+            .join('\n')
+        }`
+      : '';
+
     return `${c.todayLine(ctx.date, ctx.dayOfWeek)}${timeBlock}
-${c.energyLine(ctx.manaLevel ?? 'not set')}${restedBlock}${focusBlock}${noteBlock}
+${c.energyLine(ctx.manaLevel ?? 'not set')}${restedBlock}${focusBlock}${noteBlock}${disruptionsBlock}${tomorrowDisruptionsBlock}${tomorrowEventsBlock}
 
 ${c.weatherTitle}
 ${weatherBlock}
