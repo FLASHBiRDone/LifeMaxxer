@@ -9,6 +9,7 @@ import { GoogleCalendarCard } from '@/components/settings/google-calendar';
 import { HouseholdCard } from '@/components/settings/household-card';
 import { LocationCard } from '@/components/settings/location-card';
 import { LanguageCard } from '@/components/settings/language-card';
+import { ThemeCard } from '@/components/settings/theme-card';
 import { normalizeLocale } from '@/lib/prompts/locales';
 import { SignOutButton } from '@/components/settings/sign-out';
 
@@ -29,7 +30,7 @@ export default async function SettingsPage({
       supabase
         .from('user_settings')
         .select(
-          'push_enabled, morning_briefing_enabled, dinner_panic_enabled, weekly_debrief_enabled',
+          'push_enabled, morning_briefing_enabled, dinner_panic_enabled, weekly_debrief_enabled, theme_dynamic',
         )
         .eq('user_id', user.id)
         .maybeSingle(),
@@ -154,6 +155,9 @@ export default async function SettingsPage({
         />
         <LocationCard initialCity={(profile as any)?.city ?? null} />
         <LanguageCard initialLocale={normalizeLocale((profile as any)?.locale)} />
+        <ThemeCard
+          initialEnabled={(settings as any)?.theme_dynamic !== false}
+        />
         <GoogleCalendarCard connected={Boolean(gtok)} status={gcalStatus} />
         <PushToggle initialEnabled={Boolean((settings as any)?.push_enabled)} />
         <NotificationPreferences

@@ -100,12 +100,159 @@
   }
 
   body {
-    background: hsl(var(--background));
+    background:
+      radial-gradient(ellipse at top, hsl(var(--mesh-1) / 0.16), transparent 60%),
+      radial-gradient(ellipse at bottom, hsl(var(--mesh-3) / 0.10), transparent 55%),
+      hsl(var(--background));
+    background-attachment: fixed;
     color: hsl(var(--foreground));
     font-feature-settings: 'rlig' 1, 'calt' 1, 'ss01' 1, 'cv11' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     line-height: 1.55;
+    transition:
+      background-color 800ms ease,
+      color 800ms ease;
+  }
+
+  /* ── DYNAMIC THEMES ────────────────────────────────────────────────
+     Time-of-day palettes (data-theme) shift accent + gradient tokens;
+     weather modifiers (data-weather) tint mesh + accents; moon phase
+     (data-moon) only matters at night and lifts/darkens the night
+     palette. Foreground/background stay readable across all combos
+     because we never override --foreground here, and only override
+     --background where the contrast still holds. */
+
+  [data-theme='dawn'] {
+    --primary: 14 80% 56%;
+    --ring: 14 80% 56%;
+    --accent: 32 92% 58%;
+    --grad-a: 14 88% 64%;
+    --grad-b: 30 95% 70%;
+    --grad-warm-a: 22 92% 62%;
+    --grad-warm-b: 6 88% 65%;
+    --mesh-1: 14 88% 70%;
+    --mesh-2: 30 92% 72%;
+    --mesh-3: 348 80% 72%;
+  }
+
+  [data-theme='golden'] {
+    --primary: 26 86% 52%;
+    --ring: 26 86% 52%;
+    --accent: 38 95% 56%;
+    --grad-a: 22 92% 56%;
+    --grad-b: 38 92% 60%;
+    --grad-warm-a: 18 92% 58%;
+    --grad-warm-b: 32 92% 60%;
+    --mesh-1: 18 88% 60%;
+    --mesh-2: 32 92% 62%;
+    --mesh-3: 8 80% 60%;
+  }
+
+  [data-theme='dusk'] {
+    --primary: 250 52% 58%;
+    --ring: 250 52% 58%;
+    --accent: 320 55% 62%;
+    --grad-a: 232 58% 56%;
+    --grad-b: 280 50% 62%;
+    --grad-warm-a: 320 55% 60%;
+    --grad-warm-b: 270 50% 58%;
+    --mesh-1: 250 60% 60%;
+    --mesh-2: 280 50% 60%;
+    --mesh-3: 220 60% 56%;
+  }
+
+  /* Night also forces a dark canvas regardless of the user's
+     light/dark preference — the night palette only makes sense
+     against a dark background. */
+  [data-theme='night'] {
+    --background: 222 32% 8%;
+    --foreground: 215 18% 92%;
+    --card: 222 28% 12%;
+    --card-foreground: 215 18% 92%;
+    --secondary: 222 24% 16%;
+    --secondary-foreground: 215 18% 90%;
+    --muted: 222 24% 14%;
+    --muted-foreground: 215 12% 64%;
+    --border: 222 18% 22%;
+    --input: 222 18% 22%;
+
+    --primary: 215 70% 64%;
+    --primary-foreground: 222 32% 8%;
+    --ring: 215 70% 64%;
+    --accent: 220 30% 76%;
+    --accent-foreground: 222 32% 8%;
+
+    --grad-a: 230 50% 32%;
+    --grad-b: 215 60% 42%;
+    --grad-warm-a: 220 30% 60%;
+    --grad-warm-b: 245 35% 55%;
+
+    --mesh-1: 230 55% 32%;
+    --mesh-2: 250 45% 38%;
+    --mesh-3: 200 60% 50%;
+  }
+
+  /* ── WEATHER MODIFIERS ──────────────────────────────────────────── */
+
+  [data-weather='rain'] {
+    --accent: 210 65% 56%;
+    --grad-warm-a: 210 70% 56%;
+    --grad-warm-b: 220 75% 56%;
+    --mesh-3: 210 70% 50%;
+  }
+
+  [data-weather='snow'] {
+    --accent: 200 35% 70%;
+    --grad-warm-a: 200 40% 80%;
+    --grad-warm-b: 220 45% 86%;
+    --mesh-1: 200 45% 86%;
+    --mesh-2: 220 50% 92%;
+    --mesh-3: 210 50% 88%;
+  }
+
+  [data-weather='fog'] {
+    --accent: 215 14% 58%;
+    --grad-warm-a: 215 12% 64%;
+    --grad-warm-b: 220 10% 58%;
+    --mesh-1: 210 10% 78%;
+    --mesh-2: 215 8% 72%;
+    --mesh-3: 220 8% 68%;
+  }
+
+  /* Night-with-weather: snow on a night sky should be cool silver,
+     not pale ice — re-tune so the snow modifier doesn't blow out
+     the dark canvas. Same idea for fog. */
+  [data-theme='night'][data-weather='snow'] {
+    --mesh-1: 210 50% 50%;
+    --mesh-2: 220 45% 55%;
+    --mesh-3: 200 45% 60%;
+    --accent: 210 30% 78%;
+  }
+
+  [data-theme='night'][data-weather='fog'] {
+    --mesh-1: 215 12% 28%;
+    --mesh-2: 220 10% 32%;
+    --mesh-3: 210 10% 36%;
+    --accent: 215 10% 60%;
+  }
+
+  /* ── MOON PHASE (night only) ────────────────────────────────────── */
+
+  [data-theme='night'][data-moon='new'] {
+    --background: 222 38% 5%;
+    --card: 222 32% 10%;
+    --primary: 220 50% 56%;
+    --mesh-3: 215 50% 38%;
+  }
+
+  [data-theme='night'][data-moon='full'] {
+    --primary: 220 28% 78%;
+    --accent: 215 18% 86%;
+    --grad-a: 230 40% 38%;
+    --grad-b: 215 50% 52%;
+    --mesh-1: 215 35% 55%;
+    --mesh-3: 215 40% 70%;
   }
 
   /* Tighten heading tracking and refine scale */

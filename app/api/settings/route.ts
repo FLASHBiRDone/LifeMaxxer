@@ -8,6 +8,7 @@ const bodySchema = z.object({
   morning_briefing_enabled: z.boolean().optional(),
   dinner_panic_enabled: z.boolean().optional(),
   weekly_debrief_enabled: z.boolean().optional(),
+  theme_dynamic: z.boolean().optional(),
 });
 
 export async function PATCH(request: NextRequest) {
