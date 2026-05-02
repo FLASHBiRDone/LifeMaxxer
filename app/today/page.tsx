@@ -6,7 +6,10 @@ import { TodayQuests } from '@/components/today/quests';
 import { TodayHabits } from '@/components/today/habits';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
-import { TodayPlansPreview } from '@/components/today/plans-preview';
+import {
+  TodayWorkoutCard,
+  TodayDinnerCard,
+} from '@/components/today/plans-preview';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
@@ -420,17 +423,16 @@ export default async function TodayPage() {
         loggedToday={[...loggedSet] as string[]}
       />
 
-      {/* SUPPLEMENTS — daily dose log */}
+      {/* SUPPLEMENTS — daily dose log (already slot-ordered inside) */}
       <SupplementsCard items={supplementsToday} currentSlot={currentSlot} />
 
-      {/* PLANS */}
-      <TodayPlansPreview
-        dinner={todayDinner}
-        workout={todayWorkout}
-        people={dinnerPeople}
-      />
+      {/* AFTERNOON — training */}
+      <TodayWorkoutCard workout={todayWorkout} />
 
-      {/* OPEN MARKETPLACE TASKS */}
+      {/* EVENING — dinner */}
+      <TodayDinnerCard dinner={todayDinner} people={dinnerPeople} />
+
+      {/* ANYTIME — marketplace tasks (no time anchor) */}
       <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
 
       {/* NAV — moved to bottom; shortcuts are navigation, not the focus */}
