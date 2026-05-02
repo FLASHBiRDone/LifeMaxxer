@@ -170,7 +170,7 @@ export function InboxClient({
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-medium">
             Tankedump
           </p>
-          <h1 className="text-2xl font-bold">Inbox</h1>
+          <h1 className="text-2xl font-bold">Huskelister</h1>
           <p className="text-xs text-muted-foreground mt-1">
             {items.length} {items.length === 1 ? 'ting' : 'ting'} å sortere
           </p>

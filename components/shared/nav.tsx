@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 
 const tabs = [
   { href: '/today', icon: Sparkles, label: 'I dag' },
-  { href: '/inbox', icon: Brain, label: 'Inbox' },
+  { href: '/inbox', icon: Brain, label: 'Huskelister' },
   { href: '/calendar', icon: CalendarDays, label: 'Kalender' },
   { href: '/stats', icon: BarChart3, label: 'Statistikk' },
   { href: '/settings', icon: Settings, label: 'Meg' },

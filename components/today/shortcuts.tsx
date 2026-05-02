@@ -6,7 +6,7 @@ const SHORTCUTS = [
   { href: '/training', icon: Dumbbell, label: 'Trening' },
   { href: '/recipes', icon: ChefHat, label: 'Middager' },
   { href: '/shopping', icon: ShoppingBasket, label: 'Handleliste' },
-  { href: '/inbox', icon: Inbox, label: 'Idé-pott' },
+  { href: '/inbox', icon: Inbox, label: 'Huskelister' },
   { href: '/rewards', icon: Trophy, label: 'Belønninger' },
 ] as const;
 
