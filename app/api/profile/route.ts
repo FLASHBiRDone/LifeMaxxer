@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePlace } from '@/lib/weather';
 import { SUPPORTED_LOCALES } from '@/lib/prompts/locales';
 
@@ -91,11 +92,22 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  const { error } = await supabase
+  // Upsert via admin client so accounts that predate the bootstrap
+  // trigger (or had it fail silently) still get a row created on
+  // first save instead of an `update` that silently affects 0 rows.
+  // We've already authenticated above; this only ever touches the
+  // authenticated user's own row.
+  const admin = createAdminClient();
+  const { error } = await admin
     .from('user_profiles')
-    .update(patch)
-    .eq('id', user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    .upsert(
+      { id: user.id, email: user.email, ...patch },
+      { onConflict: 'id' },
+    );
+  if (error) {
+    console.error('[profile] upsert failed', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, geocode });
 }
