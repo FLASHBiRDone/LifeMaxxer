@@ -1,4 +1,4 @@
-import { Trophy, Sparkles, Target } from 'lucide-react';
+import { Pill, Sparkles, Target, Trophy } from 'lucide-react';
 
 function levelFromXp(xp: number): { level: number; progress: number; nextAt: number; currAt: number } {
   // level n requires 50 * n * (n-1) / 2 total XP; simpler: threshold_n = 25 * n * (n+1)
@@ -15,11 +15,13 @@ export function LevelCard({
   totalHabits,
   totalQuests,
   mainQuests,
+  totalSupplementDoses,
 }: {
   xp: number;
   totalHabits: number;
   totalQuests: number;
   mainQuests: number;
+  totalSupplementDoses: number;
 }) {
   const { level, progress, nextAt, currAt } = levelFromXp(xp);
   const xpInLevel = xp - currAt;
@@ -49,9 +51,10 @@ export function LevelCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-border/50">
+      <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-border/50">
         <StatCell icon={<Target className="h-3.5 w-3.5" />} label="Oppdrag" value={totalQuests} />
         <StatCell icon={<Sparkles className="h-3.5 w-3.5" />} label="Vaner" value={totalHabits} />
+        <StatCell icon={<Pill className="h-3.5 w-3.5" />} label="Tilskudd" value={totalSupplementDoses} />
         <StatCell icon={<Trophy className="h-3.5 w-3.5" />} label="Bosser" value={mainQuests} />
       </div>
     </section>

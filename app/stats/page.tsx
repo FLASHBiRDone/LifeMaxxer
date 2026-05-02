@@ -1,11 +1,16 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { osloDayBounds, osloWeekDays } from '@/lib/time';
+import { getXpBalance } from '@/lib/xp';
 import { LevelCard } from '@/components/stats/level-card';
 import { StreaksList, type StreakRow } from '@/components/stats/streaks';
 import { ActivityRange, type ActivityDay } from '@/components/stats/activity-range';
 import { WeeklyTrend, type WeekPoint } from '@/components/stats/weekly-trend';
 import { CheckinTrends, type CheckinPoint } from '@/components/stats/checkin-trends';
+import {
+  SupplementTrends,
+  type SupplementIntakePoint,
+} from '@/components/stats/supplement-trends';
 import { WeekHabitGrid } from '@/components/today/week-habit-grid';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +69,10 @@ export default async function StatsPage() {
     { data: habitLogs },
     { data: quests },
     { data: manaLogs },
+    { data: supplements },
+    { data: supplementLogsAll },
+    { count: totalSupplementDoses },
+    xpBalance,
   ] = await Promise.all([
     supabase
       .from('habits')
@@ -86,17 +95,38 @@ export default async function StatsPage() {
       .select('logged_for, level, rested, focus')
       .eq('user_id', user.id)
       .gte('logged_for', from14),
+    // Active supplements + their slot/weekday config so we can compute
+    // the *scheduled* count per day for the adherence chart.
+    supabase
+      .from('supplements')
+      .select('id, slots, schedule_days')
+      .eq('user_id', user.id)
+      .eq('archived', false),
+    // 14-day intake logs for the trends chart.
+    supabase
+      .from('supplement_logs')
+      .select('logged_for, supplement_id, slot')
+      .eq('user_id', user.id)
+      .gte('logged_for', from14),
+    // All-time dose count for the LevelCard headline number.
+    supabase
+      .from('supplement_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+    getXpBalance(supabase, user.id),
   ]);
 
   const habitsList = (habits as any[]) ?? [];
   const logsList = (habitLogs as any[]) ?? [];
   const questsList = (quests as any[]) ?? [];
 
-  // ── XP / Level
+  // ── XP / Level — use the canonical balance helper so supplement
+  // payouts + marketplace earnings are reflected here, matching what
+  // /rewards and /marked show.
   const totalHabits = logsList.length;
   const totalQuests = questsList.length;
   const mainQuests = questsList.filter((q) => q.is_main).length;
-  const xp = totalHabits * 1 + totalQuests * 5 + mainQuests * 5;
+  const xp = xpBalance.earned;
 
   // ── Streaks per habit
   const logsByHabit = new Map<string, Set<string>>();
@@ -153,6 +183,31 @@ export default async function StatsPage() {
     });
   }
 
+  // ── Supplement adherence trend: last 14 days. Scheduled count per
+  // day = sum of slots across active supplements that are due on
+  // that weekday. Empty schedule_days = every day.
+  const suppList = (supplements as any[]) ?? [];
+  const intakeByDate = new Map<string, number>();
+  for (const l of (supplementLogsAll as any[]) ?? []) {
+    intakeByDate.set(l.logged_for, (intakeByDate.get(l.logged_for) ?? 0) + 1);
+  }
+  const supplementPoints: SupplementIntakePoint[] = [];
+  for (let i = 0; i < 14; i++) {
+    const ds = addDays(from14, i);
+    const dow = new Date(ds + 'T00:00:00').getDay();
+    let scheduled = 0;
+    for (const s of suppList) {
+      const days = (s.schedule_days as number[]) ?? [];
+      if (days.length > 0 && !days.includes(dow)) continue;
+      scheduled += (s.slots as string[])?.length ?? 0;
+    }
+    supplementPoints.push({
+      date: ds,
+      taken: intakeByDate.get(ds) ?? 0,
+      scheduled,
+    });
+  }
+
   // ── Weekly trend: last 4 weeks (Mon-Sun)
   const weeks: WeekPoint[] = [];
   const todayDate = new Date(today + 'T00:00:00');
@@ -187,11 +242,14 @@ export default async function StatsPage() {
         totalHabits={totalHabits}
         totalQuests={totalQuests}
         mainQuests={mainQuests}
+        totalSupplementDoses={totalSupplementDoses ?? 0}
       />
 
       <ActivityRange days={activityDays} todayString={today} />
 
       <CheckinTrends days={checkinPoints} />
+
+      <SupplementTrends days={supplementPoints} />
 
       <WeeklyTrend weeks={weeks} />
 
