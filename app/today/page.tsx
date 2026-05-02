@@ -1,11 +1,8 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Sunrise, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { osloDayBounds, todayPlanIndex } from '@/lib/time';
 import { filterHabitsForToday } from '@/lib/habit-schedule';
 import { TodayQuests } from '@/components/today/quests';
-import { EnergyCheckIn } from '@/components/today/energy';
 import { TodayHabits } from '@/components/today/habits';
 import { TodayHero } from '@/components/today/hero';
 import { TodayShortcuts } from '@/components/today/shortcuts';
@@ -13,6 +10,7 @@ import { TodayPlansPreview } from '@/components/today/plans-preview';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
+import { MorningCheckin } from '@/components/today/morning-checkin';
 import { WeatherWidget } from '@/components/today/weather-widget';
 
 export const dynamic = 'force-dynamic';
@@ -84,7 +82,7 @@ export default async function TodayPage() {
     questFilter.order('is_main', { ascending: false }),
     supabase
       .from('mana_logs')
-      .select('level')
+      .select('level, rested, focus')
       .eq('user_id', user.id)
       .eq('logged_for', dateString)
       .maybeSingle(),
@@ -271,9 +269,6 @@ export default async function TodayPage() {
       : null,
   }));
 
-  const hour = new Date().getHours();
-  const showMorningRitual = !mana && hour < 12;
-
   // Today's dinner + workout pulled from the latest stored plans.
   let todayDinner: any = null;
   let dinnerPeople: number | null = null;
@@ -312,23 +307,6 @@ export default async function TodayPage() {
 
   return (
     <main className="container max-w-xl py-6 space-y-5">
-      {/* TOP BANNERS */}
-      {showMorningRitual && (
-        <Link
-          href="/gm"
-          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 hover:bg-primary/10 transition-colors soft-shadow"
-        >
-          <div className="h-9 w-9 rounded-xl grad-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
-            <Sunrise className="h-4 w-4" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold">Start dagen rolig</p>
-            <p className="text-[11px] text-muted-foreground">Morgen-ritual · 30 sekunder</p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
-        </Link>
-      )}
-
       <LocationPrompt alreadyHasCity={Boolean(userCity)} />
 
       {hasCoords && (
@@ -350,14 +328,26 @@ export default async function TodayPage() {
         energyLevel={(mana as any)?.level as Level | null ?? null}
       />
 
-      {/* THE BRIEF — primary morning action */}
-      <BriefCard
-        intro={briefing?.intro ?? null}
-        summary={briefing?.summary ?? null}
-        clothing={briefing?.clothing ?? null}
-        onGeneratedAt={(briefingRow as any)?.created_at ?? null}
-        hasLocation={Boolean(userCity)}
-      />
+      {/* THE BRIEF — primary morning action.
+          When no brief exists yet, walk the user through the morning
+          ritual (energy → rested → focus → optional note) and the
+          last step kicks off the briefing run. Once it's generated
+          BriefCard takes over with the result. */}
+      {briefing ? (
+        <BriefCard
+          intro={briefing.intro ?? null}
+          summary={briefing.summary ?? null}
+          clothing={briefing.clothing ?? null}
+          onGeneratedAt={(briefingRow as any)?.created_at ?? null}
+          hasLocation={Boolean(userCity)}
+        />
+      ) : (
+        <MorningCheckin
+          initialEnergy={(mana as any)?.level as Level | null ?? null}
+          initialRested={(mana as any)?.rested as Level | null ?? null}
+          initialFocus={(mana as any)?.focus as Level | null ?? null}
+        />
+      )}
 
       {/* TODAY'S ASSIGNMENTS */}
       <TodayQuests quests={questsList} />
@@ -376,9 +366,6 @@ export default async function TodayPage() {
 
       {/* OPEN MARKETPLACE TASKS */}
       <TodayOpenTasks initial={openTasks} currentUserId={user.id} />
-
-      {/* CHECK-IN */}
-      <EnergyCheckIn initialLevel={(mana as any)?.level as Level | null ?? null} />
 
       {/* NAV — moved to bottom; shortcuts are navigation, not the focus */}
       <TodayShortcuts />

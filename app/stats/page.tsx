@@ -5,6 +5,7 @@ import { LevelCard } from '@/components/stats/level-card';
 import { StreaksList, type StreakRow } from '@/components/stats/streaks';
 import { ActivityRange, type ActivityDay } from '@/components/stats/activity-range';
 import { WeeklyTrend, type WeekPoint } from '@/components/stats/weekly-trend';
+import { CheckinTrends, type CheckinPoint } from '@/components/stats/checkin-trends';
 import { WeekHabitGrid } from '@/components/today/week-habit-grid';
 
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,13 @@ export default async function StatsPage() {
   const weekDays = osloWeekDays();
   const from365 = addDays(today, -364);
 
-  const [{ data: habits }, { data: habitLogs }, { data: quests }] = await Promise.all([
+  const from14 = addDays(today, -13);
+  const [
+    { data: habits },
+    { data: habitLogs },
+    { data: quests },
+    { data: manaLogs },
+  ] = await Promise.all([
     supabase
       .from('habits')
       .select('id, name')
@@ -74,6 +81,11 @@ export default async function StatsPage() {
       .eq('user_id', user.id)
       .not('completed_at', 'is', null)
       .gte('scheduled_for', from365),
+    supabase
+      .from('mana_logs')
+      .select('logged_for, level, rested, focus')
+      .eq('user_id', user.id)
+      .gte('logged_for', from14),
   ]);
 
   const habitsList = (habits as any[]) ?? [];
@@ -124,6 +136,23 @@ export default async function StatsPage() {
     }
   }
 
+  // ── Morning check-in trend: last 14 days
+  const manaByDate = new Map<string, any>();
+  for (const m of (manaLogs as any[]) ?? []) {
+    manaByDate.set(m.logged_for, m);
+  }
+  const checkinPoints: CheckinPoint[] = [];
+  for (let i = 0; i < 14; i++) {
+    const ds = addDays(from14, i);
+    const m = manaByDate.get(ds);
+    checkinPoints.push({
+      date: ds,
+      level: m?.level ?? null,
+      rested: m?.rested ?? null,
+      focus: m?.focus ?? null,
+    });
+  }
+
   // ── Weekly trend: last 4 weeks (Mon-Sun)
   const weeks: WeekPoint[] = [];
   const todayDate = new Date(today + 'T00:00:00');
@@ -161,6 +190,8 @@ export default async function StatsPage() {
       />
 
       <ActivityRange days={activityDays} todayString={today} />
+
+      <CheckinTrends days={checkinPoints} />
 
       <WeeklyTrend weeks={weeks} />
 

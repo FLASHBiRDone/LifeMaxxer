@@ -20,6 +20,12 @@ export type MorningContext = {
   dayPart?: string;
   locale: Locale;
   manaLevel?: 'low' | 'medium' | 'high' | null;
+  /** Self-reported sleep quality. Same scale as energy. */
+  restedLevel?: 'low' | 'medium' | 'high' | null;
+  /** Self-reported focus / mental clarity. Same scale as energy. */
+  focusLevel?: 'low' | 'medium' | 'high' | null;
+  /** Free-form note from the morning check-in (dream, thought, etc.). */
+  extraNote?: string | null;
   events: { start: string; title: string }[];
   pendingHabits: string[];
   dinner?: { title: string; description?: string } | null;
@@ -50,6 +56,8 @@ ABSOLUTTE REGLER:
 - Hvis kalenderen er tom, er det en gave – ikke et problem.
 - Hvis energien er «low», velg ÉN ting, ikke tre.
 - Hvis energien er «high», foreslå opptil tre, men aldri flere.
+- Hvis brukeren er dårlig uthvilt eller har lavt fokus, senk ambisjonsnivået ÉN hakk: færre oppdrag, mildere språk, og en eksplisitt påminnelse om at det er greit å ta det med ro. Ikke kommenter direkte på «du er sliten» — vis det i hvilke valg du foreslår.
+- Hvis brukeren har lagt igjen et notat (drøm, tanke, noe på hjertet), referér forsiktig til det i intro eller summary uten å gjenta det ordrett. Hvis det er en drøm, hold tonen lett og ikke tolk den dypt.
 - Skriv på bokmål.
 - Brukeren har egen vilje. Du foreslår, du befaler ikke.
 - Tilpass tonen til klokkeslettet: tidlig morgen (før 09) er rolig og oppvåknende; formiddag og ettermiddag er mer handlingsrettet. Hvis det er kveld, gi en kort oppsummering av hva som er igjen i dag og fokuser på en mild avslutning, ikke en heisende start.
@@ -90,6 +98,8 @@ ABSOLUTE RULES:
 - If the calendar is empty, celebrate that as a gift, not a problem.
 - If energy is "low," pick ONE thing, not three.
 - If energy is "high," offer up to three, but never more.
+- If the user is poorly rested or low on focus, dial down ambition by ONE notch: fewer quests, softer language, and a quiet reminder that taking it easy is fine. Don't say "you're tired" — show it in the choices you make.
+- If the user left a note (dream, thought, something on their mind), reference it gently in the intro or summary without quoting it back. If it's a dream, keep the tone light and don't try to interpret it.
 - Write in English.
 - The user has agency. You suggest; you do not command.
 - Match tone to time of day: early morning (before 09) is gentle and waking-up; mid-morning and afternoon are more action-oriented. If it's evening, summarize briefly what's left and aim for a soft wind-down, not a hyped-up start.
@@ -143,6 +153,9 @@ type UserCopy = {
   todayLine: (date: string, dow: string) => string;
   timeLine: (time: string, dayPart: string) => string;
   energyLine: (level: string) => string;
+  restedLine: (level: string) => string;
+  focusLine: (level: string) => string;
+  noteTitle: string;
   weatherTitle: string;
   weatherLocation: (city: string) => string;
   weatherCondition: (cond: string) => string;
@@ -166,6 +179,9 @@ const COPY: Record<Locale, UserCopy> = {
     todayLine: (date, dow) => `I dag er ${date} (${dow}).`,
     timeLine: (time, dayPart) => `Klokken er ${time} (${dayPart}).`,
     energyLine: (lvl) => `Energinivå: ${lvl}`,
+    restedLine: (lvl) => `Uthvilt: ${lvl}`,
+    focusLine: (lvl) => `Fokus / hodet klart: ${lvl}`,
+    noteTitle: 'Brukerens notat fra morgen-innsjekken:',
     weatherTitle: 'Været i dag:',
     weatherLocation: (city) => `- Sted: ${city}`,
     weatherCondition: (c) => `- Forhold: ${c}`,
@@ -187,6 +203,9 @@ const COPY: Record<Locale, UserCopy> = {
     todayLine: (date, dow) => `Today is ${date} (${dow}).`,
     timeLine: (time, dayPart) => `It is ${time} (${dayPart}).`,
     energyLine: (lvl) => `Energy level: ${lvl}`,
+    restedLine: (lvl) => `Rested: ${lvl}`,
+    focusLine: (lvl) => `Focus / mental clarity: ${lvl}`,
+    noteTitle: "User's note from the morning check-in:",
     weatherTitle: "Today's weather:",
     weatherLocation: (city) => `- Location: ${city}`,
     weatherCondition: (c) => `- Condition: ${c}`,
@@ -257,8 +276,18 @@ export const MORNING_BRIEFING_V1 = {
       ? `\n${c.timeLine(ctx.currentTime, ctx.dayPart)}`
       : '';
 
+    const restedBlock = ctx.restedLevel
+      ? `\n${c.restedLine(ctx.restedLevel)}`
+      : '';
+    const focusBlock = ctx.focusLevel
+      ? `\n${c.focusLine(ctx.focusLevel)}`
+      : '';
+    const noteBlock = ctx.extraNote && ctx.extraNote.trim()
+      ? `\n\n${c.noteTitle}\n${ctx.extraNote.trim()}`
+      : '';
+
     return `${c.todayLine(ctx.date, ctx.dayOfWeek)}${timeBlock}
-${c.energyLine(ctx.manaLevel ?? 'not set')}
+${c.energyLine(ctx.manaLevel ?? 'not set')}${restedBlock}${focusBlock}${noteBlock}
 
 ${c.weatherTitle}
 ${weatherBlock}

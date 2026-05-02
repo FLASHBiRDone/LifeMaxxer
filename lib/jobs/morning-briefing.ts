@@ -107,14 +107,18 @@ export async function runMorningBriefingFor(userId: string) {
     .filter((h) => !completedIds.has(h.id))
     .map((h) => h.name);
 
-  // Latest mana log (today's, if any)
+  // Latest mana log (today's, if any). Energy + the new rested/focus
+  // dimensions + the optional free-form note from the morning ritual.
   const { data: manaRow } = await admin
     .from('mana_logs')
-    .select('level')
+    .select('level, rested, focus, extra_note')
     .eq('user_id', userId)
     .eq('logged_for', dateString)
     .maybeSingle();
   const manaLevel = (manaRow as any)?.level ?? null;
+  const restedLevel = (manaRow as any)?.rested ?? null;
+  const focusLevel = (manaRow as any)?.focus ?? null;
+  const extraNote = (manaRow as any)?.extra_note ?? null;
 
   // Today's dinner from the latest meal plan + today's workout from the
   // active training plan. Both are optional — they're inputs to the
@@ -265,6 +269,9 @@ export async function runMorningBriefingFor(userId: string) {
     dayPart,
     locale,
     manaLevel,
+    restedLevel,
+    focusLevel,
+    extraNote,
     events: events.map((e) => ({ start: e.start, title: e.title })),
     pendingHabits,
     dinner,
