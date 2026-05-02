@@ -13,6 +13,7 @@ import { TodayPlansPreview } from '@/components/today/plans-preview';
 import { TodayOpenTasks, type OpenTask } from '@/components/today/open-tasks';
 import { LocationPrompt } from '@/components/today/location-prompt';
 import { BriefCard } from '@/components/today/brief-card';
+import { WeatherWidget } from '@/components/today/weather-widget';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,12 +132,20 @@ export default async function TodayPage() {
       : Promise.resolve({ data: [] as any[] }),
     supabase
       .from('user_profiles')
-      .select('city')
+      .select('city, latitude, longitude, timezone')
       .eq('id', user.id)
       .maybeSingle(),
   ]);
 
   const userCity = (locationProfile as any)?.city as string | null | undefined;
+  const userLat = (locationProfile as any)?.latitude;
+  const userLon = (locationProfile as any)?.longitude;
+  const userTz = (locationProfile as any)?.timezone as string | null | undefined;
+  // Numeric columns can come back as strings from PostgREST.
+  const latNum = userLat == null ? null : Number(userLat);
+  const lonNum = userLon == null ? null : Number(userLon);
+  const hasCoords =
+    latNum != null && lonNum != null && !Number.isNaN(latNum) && !Number.isNaN(lonNum);
 
   let briefing: BriefingOutput | null = null;
   if (briefingRow?.content) {
@@ -321,6 +330,15 @@ export default async function TodayPage() {
       )}
 
       <LocationPrompt alreadyHasCity={Boolean(userCity)} />
+
+      {hasCoords && (
+        <WeatherWidget
+          city={userCity ?? null}
+          latitude={latNum!}
+          longitude={lonNum!}
+          timezone={userTz ?? null}
+        />
+      )}
 
       {/* HERO — at-a-glance numbers */}
       <TodayHero

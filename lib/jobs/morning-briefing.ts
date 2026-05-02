@@ -6,6 +6,27 @@ import { sendPush } from '@/lib/push';
 import { fetchTodayForecast } from '@/lib/weather';
 import type { MorningContext } from '@/lib/prompts';
 import { normalizeLocale } from '@/lib/prompts/locales';
+import type { Locale } from '@/lib/prompts/locales';
+
+/**
+ * Localised "phase of day" label so the model can match tone to the
+ * clock — early-morning is softer, late-evening is wind-down. Splits at
+ * the same boundaries the user-facing greeting uses.
+ */
+function dayPartLabel(hour: number, locale: Locale): string {
+  if (locale === 'nb') {
+    if (hour < 9) return 'tidlig morgen';
+    if (hour < 12) return 'formiddag';
+    if (hour < 17) return 'ettermiddag';
+    if (hour < 22) return 'kveld';
+    return 'natt';
+  }
+  if (hour < 9) return 'early morning';
+  if (hour < 12) return 'mid-morning';
+  if (hour < 17) return 'afternoon';
+  if (hour < 22) return 'evening';
+  return 'late night';
+}
 
 /**
  * Per-user morning briefing generator. Run for every eligible user each
@@ -226,9 +247,22 @@ export async function runMorningBriefingFor(userId: string) {
     console.info('[morning-briefing] weather skipped — no location set', { userId, city });
   }
 
+  // Time-of-day in the user's timezone — surface to the model so the
+  // tone shifts between an early-morning wake-up and a midday recap.
+  const nowFmt = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: tz,
+  }).format(new Date());
+  const hourNow = Number(nowFmt.slice(0, 2));
+  const dayPart = dayPartLabel(hourNow, locale);
+
   const ctx: MorningContext = {
     date: dateString,
     dayOfWeek,
+    currentTime: nowFmt,
+    dayPart,
     locale,
     manaLevel,
     events: events.map((e) => ({ start: e.start, title: e.title })),

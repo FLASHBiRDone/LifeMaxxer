@@ -14,6 +14,10 @@ export type WeatherForMorning = {
 export type MorningContext = {
   date: string;
   dayOfWeek: string;
+  /** HH:MM in the user's timezone, e.g. "07:42". Drives time-aware tone. */
+  currentTime?: string;
+  /** Localized phase-of-day label, e.g. "tidlig morgen" / "ettermiddag". */
+  dayPart?: string;
   locale: Locale;
   manaLevel?: 'low' | 'medium' | 'high' | null;
   events: { start: string; title: string }[];
@@ -48,6 +52,7 @@ ABSOLUTTE REGLER:
 - Hvis energien er «high», foreslå opptil tre, men aldri flere.
 - Skriv på bokmål.
 - Brukeren har egen vilje. Du foreslår, du befaler ikke.
+- Tilpass tonen til klokkeslettet: tidlig morgen (før 09) er rolig og oppvåknende; formiddag og ettermiddag er mer handlingsrettet. Hvis det er kveld, gi en kort oppsummering av hva som er igjen i dag og fokuser på en mild avslutning, ikke en heisende start.
 
 INNHOLDSREGLER:
 - intro: én varm setning, maks 18 ord.
@@ -87,6 +92,7 @@ ABSOLUTE RULES:
 - If energy is "high," offer up to three, but never more.
 - Write in English.
 - The user has agency. You suggest; you do not command.
+- Match tone to time of day: early morning (before 09) is gentle and waking-up; mid-morning and afternoon are more action-oriented. If it's evening, summarize briefly what's left and aim for a soft wind-down, not a hyped-up start.
 
 CONTENT RULES:
 - intro: one warm sentence, max 18 words.
@@ -135,6 +141,7 @@ type UserCopy = {
   noMeal: string;
   noWorkout: string;
   todayLine: (date: string, dow: string) => string;
+  timeLine: (time: string, dayPart: string) => string;
   energyLine: (level: string) => string;
   weatherTitle: string;
   weatherLocation: (city: string) => string;
@@ -157,6 +164,7 @@ const COPY: Record<Locale, UserCopy> = {
     noMeal: '(ingen middag planlagt)',
     noWorkout: '(ingen trening planlagt)',
     todayLine: (date, dow) => `I dag er ${date} (${dow}).`,
+    timeLine: (time, dayPart) => `Klokken er ${time} (${dayPart}).`,
     energyLine: (lvl) => `Energinivå: ${lvl}`,
     weatherTitle: 'Været i dag:',
     weatherLocation: (city) => `- Sted: ${city}`,
@@ -177,6 +185,7 @@ const COPY: Record<Locale, UserCopy> = {
     noMeal: '(no meal planned)',
     noWorkout: '(no workout planned)',
     todayLine: (date, dow) => `Today is ${date} (${dow}).`,
+    timeLine: (time, dayPart) => `It is ${time} (${dayPart}).`,
     energyLine: (lvl) => `Energy level: ${lvl}`,
     weatherTitle: "Today's weather:",
     weatherLocation: (city) => `- Location: ${city}`,
@@ -244,7 +253,11 @@ export const MORNING_BRIEFING_V1 = {
         ].join('\n')
       : c.weatherUnknown;
 
-    return `${c.todayLine(ctx.date, ctx.dayOfWeek)}
+    const timeBlock = ctx.currentTime && ctx.dayPart
+      ? `\n${c.timeLine(ctx.currentTime, ctx.dayPart)}`
+      : '';
+
+    return `${c.todayLine(ctx.date, ctx.dayOfWeek)}${timeBlock}
 ${c.energyLine(ctx.manaLevel ?? 'not set')}
 
 ${c.weatherTitle}

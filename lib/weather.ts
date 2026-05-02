@@ -23,6 +23,15 @@ export type DailyForecast = {
   conditionLabel: string; // Norwegian label derived from the code
 };
 
+export type CurrentWeather = {
+  tempC: number;
+  windKmh: number;
+  isDay: boolean;
+  conditionCode: number;
+  conditionLabel: string;
+  observedAt: string; // ISO timestamp from API
+};
+
 /**
  * Resolve a free-form city/place name to coordinates. Returns null when
  * nothing matches (bad spelling, empty, etc.) so callers can surface a
@@ -144,5 +153,53 @@ export async function fetchTodayForecast(
     windMaxKmh: Math.round(d.wind_speed_10m_max[0] ?? 0),
     conditionCode: code,
     conditionLabel: CONDITION_NB[code] ?? 'ukjent',
+  };
+}
+
+/**
+ * Fetch the live "current" weather snapshot — temp + condition right
+ * now. Used by the small widget on /today; cheap enough to call
+ * server-side per page render thanks to Next's fetch cache (we set a
+ * 10-minute revalidate so refreshes don't hammer the API).
+ */
+export async function fetchCurrentWeather(
+  latitude: number,
+  longitude: number,
+  timezone: string = 'Europe/Oslo',
+): Promise<CurrentWeather | null> {
+  const url = new URL('https://api.open-meteo.com/v1/forecast');
+  url.searchParams.set('latitude', String(latitude));
+  url.searchParams.set('longitude', String(longitude));
+  url.searchParams.set(
+    'current',
+    'temperature_2m,weather_code,wind_speed_10m,is_day',
+  );
+  url.searchParams.set('timezone', timezone);
+
+  const res = await fetch(url.toString(), {
+    headers: { 'Accept': 'application/json' },
+    // Cache for 10 minutes — current conditions don't change faster
+    // than that and we don't want to hit Open-Meteo on every navigation.
+    next: { revalidate: 600 },
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    current?: {
+      time: string;
+      temperature_2m: number;
+      weather_code: number;
+      wind_speed_10m: number;
+      is_day: number;
+    };
+  };
+  const c = body.current;
+  if (!c) return null;
+  return {
+    tempC: Math.round(c.temperature_2m * 10) / 10,
+    windKmh: Math.round(c.wind_speed_10m),
+    isDay: Boolean(c.is_day),
+    conditionCode: c.weather_code,
+    conditionLabel: CONDITION_NB[c.weather_code] ?? 'ukjent',
+    observedAt: c.time,
   };
 }

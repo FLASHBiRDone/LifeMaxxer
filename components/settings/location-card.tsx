@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, Loader2, LocateFixed, MapPin, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { resolveDeviceLocation } from '@/lib/geo-client';
  *    server skips the lookup
  */
 export function LocationCard({ initialCity }: { initialCity: string | null }) {
+  const router = useRouter();
   const [city, setCity] = useState(initialCity ?? '');
   const [saving, setSaving] = useState(false);
   const [usingDevice, setUsingDevice] = useState(false);
@@ -43,6 +45,10 @@ export function LocationCard({ initialCity }: { initialCity: string | null }) {
       } else {
         setSaved('Fjernet');
       }
+      // Re-fetch the server component so the new value persists on
+      // reload — without this the client state has the new city but
+      // the next render still reads the stale prop.
+      router.refresh();
       setTimeout(() => setSaved(null), 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
@@ -72,6 +78,7 @@ export function LocationCard({ initialCity }: { initialCity: string | null }) {
       }
       setCity(loc.city);
       setSaved(`${loc.city}${loc.country ? `, ${loc.country}` : ''}`);
+      router.refresh();
       setTimeout(() => setSaved(null), 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
@@ -91,6 +98,7 @@ export function LocationCard({ initialCity }: { initialCity: string | null }) {
         body: JSON.stringify({ city: null }),
       });
       setSaved('Fjernet');
+      router.refresh();
       setTimeout(() => setSaved(null), 2500);
     } finally {
       setSaving(false);
