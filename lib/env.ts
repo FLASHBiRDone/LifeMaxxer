@@ -14,6 +14,9 @@ const serverSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_IMAGE_MODEL: z.string().default('gemini-3-pro-image-preview'),
+  // Shared secret the dispenser firmware sends in `x-dispense-key`
+  // when it pings /api/dispense and /api/dispense/[id]/confirm.
+  SUPPLEMENT_DISPENSER_API_KEY: z.string().min(1).optional(),
 });
 
 const publicSchema = z.object({

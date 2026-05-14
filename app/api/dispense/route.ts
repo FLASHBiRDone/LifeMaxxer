@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { osloDayBounds } from '@/lib/time';
+import { serverEnv } from '@/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 10;
+
+const MAX_BODY_BYTES = 2 * 1024;
 
 /**
  * Hardware dispenser entry point. Called by the hopper firmware after
@@ -41,13 +45,17 @@ export const dynamic = 'force-dynamic';
  *   21:00–04:59 = night
  */
 export async function POST(request: NextRequest) {
-  const apiKey = request.headers.get('x-dispense-key');
-  const expected = process.env.SUPPLEMENT_DISPENSER_API_KEY;
-  if (!expected || apiKey !== expected) {
+  if (!verifyDispenseKey(request.headers.get('x-dispense-key'))) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  const raw = await request.text();
+  if (raw.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'body too large' }, { status: 413 });
+  }
+  let body: any;
+  try { body = JSON.parse(raw || '{}'); } catch { body = {}; }
+
   const token = typeof body.token === 'string' ? body.token : null;
   const kind = body.kind;
   if (!token || !['nfc_card', 'phone_nfc', 'button'].includes(kind)) {
@@ -140,6 +148,19 @@ export async function POST(request: NextRequest) {
     slot,
     items,
   });
+}
+
+/**
+ * Constant-time comparison of the shared API key. See confirm route
+ * for the full rationale — same guard, same hopper.
+ */
+function verifyDispenseKey(provided: string | null): boolean {
+  const expected = serverEnv.SUPPLEMENT_DISPENSER_API_KEY;
+  if (!expected || !provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 function currentSlot(): 'morning' | 'noon' | 'evening' | 'night' {

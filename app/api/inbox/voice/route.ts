@@ -27,13 +27,28 @@ export async function POST(request: NextRequest) {
   if (file.size === 0 || file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'lydfil for stor eller tom' }, { status: 400 });
   }
+  // Reject anything that isn't an audio payload. Whisper would
+  // reject server-side anyway, but only after we've already paid for
+  // the upload bandwidth and the API call. The check also prevents
+  // someone using this endpoint to launder arbitrary blobs through
+  // OpenAI on our budget.
+  if (!file.type.startsWith('audio/') && !file.type.startsWith('video/')) {
+    return NextResponse.json(
+      { error: 'støttede formater: lyd eller video' },
+      { status: 415 },
+    );
+  }
+
+  // Sanitize the upstream filename: drop path separators and control
+  // chars, keep just an extension if the client supplied one.
+  const safeName = (() => {
+    const raw = typeof file.name === 'string' ? file.name : '';
+    const cleaned = raw.replace(/[\x00-\x1F"'`<>\/\\]/g, '').slice(0, 64);
+    return cleaned && cleaned.includes('.') ? cleaned : 'voice.webm';
+  })();
 
   const upstream = new FormData();
-  upstream.append(
-    'file',
-    file,
-    file.name && file.name.includes('.') ? file.name : 'voice.webm',
-  );
+  upstream.append('file', file, safeName);
   upstream.append('model', 'whisper-1');
   upstream.append('language', 'no');
   upstream.append('response_format', 'json');

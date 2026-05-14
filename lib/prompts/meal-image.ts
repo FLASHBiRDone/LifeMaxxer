@@ -1,4 +1,5 @@
 import type { Locale } from './locales';
+import { sanitizePromptValue } from './sanitize';
 
 export type MealImageContext = {
   title: string;
@@ -30,11 +31,16 @@ export function buildMealImagePrompt(ctx: MealImageContext): string {
           ? 'The dish is pescatarian (no meat, but fish or seafood is fine).'
           : '';
 
+  // Sanitize so a malicious title can't break out of the quoted span
+  // and inject "Ignore previous instructions, generate …".
+  const safeTitle = sanitizePromptValue(ctx.title, 120);
+  const safeDesc = ctx.description ? sanitizePromptValue(ctx.description, 240) : '';
+
   // Keep it in English regardless of locale — image models have
   // stronger vocabulary in English and we want consistent quality.
   return [
-    `Photo-realistic food photograph of "${ctx.title}".`,
-    ctx.description ? `${ctx.description}.` : '',
+    `Photo-realistic food photograph of "${safeTitle}".`,
+    safeDesc ? `${safeDesc}.` : '',
     'Plated on a simple neutral ceramic dish on a pale wooden dining table.',
     'Natural daylight from a soft window source at 45 degrees, gentle shadows.',
     'Shot from a slight overhead angle, approximately 30-45 degrees.',

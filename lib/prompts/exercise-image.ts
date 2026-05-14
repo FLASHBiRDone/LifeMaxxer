@@ -1,5 +1,6 @@
 import type { Locale } from './locales';
 import type { TrainingEquipment, TrainingExercise } from './training-plan.v1';
+import { sanitizePromptValue } from './sanitize';
 
 export type ExerciseImageContext = {
   exercise: TrainingExercise;
@@ -75,8 +76,9 @@ export function buildExerciseImagePrompt(
 ): string {
   const setting = SETTING[ctx.location] ?? SETTING.mixed;
   const equipHint = inferEquipmentHint(ctx.exercise.name, ctx.equipment);
+  const safeName = sanitizePromptValue(ctx.exercise.name, 100);
   return [
-    `Photo-realistic side-by-side TWO-FRAME movement demonstration of "${ctx.exercise.name}".`,
+    `Photo-realistic side-by-side TWO-FRAME movement demonstration of "${safeName}".`,
     'Single wide image composed as a clean diptych split exactly down the middle:',
     'the LEFT half shows the START position of one repetition,',
     'the RIGHT half shows the END position of the same repetition.',

@@ -1,5 +1,6 @@
 import type { Locale } from './locales';
 import type { TrainingDay, TrainingEquipment } from './training-plan.v1';
+import { sanitizePromptValue } from './sanitize';
 
 export type TrainingImageContext = {
   day: TrainingDay;
@@ -94,7 +95,10 @@ export function buildTrainingImagePrompt(ctx: TrainingImageContext): string {
 
   const setting = LOCATION_SETTING[ctx.location] ?? LOCATION_SETTING.mixed;
   const pose = typeHint(ctx.day.type);
-  const topExercise = ctx.day.exercises?.[0]?.name ?? ctx.day.title;
+  const topExercise = sanitizePromptValue(
+    ctx.day.exercises?.[0]?.name ?? ctx.day.title,
+    120,
+  );
 
   // Pick at most 2 equipment hints so we don't over-specify.
   const equipHints = ctx.equipment

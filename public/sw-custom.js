@@ -1,6 +1,29 @@
 // Custom service worker handlers merged by next-pwa at build time.
 // next-pwa generates the main sw.js; this file is imported via importScripts.
-// We only handle `push` and `notificationclick` events here.
+// We handle `push`, `notificationclick`, and a `message` event used
+// by the client to clear auth-sensitive caches on sign-out.
+
+/**
+ * Clear caches that can hold the previous user's personal data when
+ * a sign-out is happening. Static-asset caches (workbox-precache,
+ * static-image-assets, etc.) stay so the next user doesn't redownload
+ * the whole app shell.
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'CLEAR_SESSION_CACHE') {
+    event.waitUntil((async () => {
+      const names = await caches.keys();
+      const personal = names.filter((n) =>
+        n.includes('pages') ||
+        n.includes('apis') ||
+        n.includes('next-data') ||
+        n.includes('cross-origin') ||
+        n.includes('static-data-assets'),
+      );
+      await Promise.all(personal.map((n) => caches.delete(n)));
+    })());
+  }
+});
 
 self.addEventListener('push', (event) => {
   if (!event.data) return;
